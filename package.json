@@ -1,0 +1,12 @@
+{
+  "name": "speccraft-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SpecCraft AI - Automated API documentation and OpenAPI 3.0 specification generator",
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "test:backend": "python -m unittest discover -s backend/tests -v",
+    "test:frontend": "npm --prefix frontend test"
+  }
+}
