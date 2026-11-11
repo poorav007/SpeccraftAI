@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "projectId": "sample-project",
+    "name": "Sample FastAPI Project",
+    "language": "python",
+    "framework": "fastapi"
+  },
+  "endpoints": [],
+  "specs": {
+    "sample-v1": {
+      "openapi": "3.0.3",
+      "info": {
+        "title": "SpecCraft Sample API",
+        "version": "1.0.0"
+      },
+      "paths": {
+        "/health": {
+          "get": {
+            "summary": "Health check",
+            "responses": {
+              "200": {
+                "description": "Service is healthy"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "reviews": []
+}
+
