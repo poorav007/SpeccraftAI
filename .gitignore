@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / React / Vite
+node_modules/
+.pnp
+.pnp.*
+dist/
+build/
+.vite/
+coverage/
+*.log
+
+# Environment variables (never commit real keys; keep examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Generated / temporary outputs (sample code & test fixtures in data/ stay tracked)
+data/generated/
+exports/
+tmp/
+
+# OS-generated files (Windows & macOS)
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# IDE / editor files
+.vscode/
+.idea/
+*.code-workspace
