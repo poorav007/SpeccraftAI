@@ -12,6 +12,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
+from speccraft.diagnostics import Diagnostic
+
 
 class HTTPMethod(str, Enum):
     """Supported HTTP request methods."""
@@ -130,6 +132,9 @@ class ExtractionResult(BaseModel):
         description="Extracted Pydantic models converted to JSON Schema dictionaries",
     )
     warnings: List[ExtractionWarning] = Field(default_factory=list, description="Non-fatal parsing warnings")
+    diagnostics: List[Diagnostic] = Field(
+        default_factory=list, description="Formal PRD Section 8 diagnostics (SC-W001 to SC-E002)"
+    )
     files_scanned: int = Field(default=0, description="Total count of files parsed")
     total_loc: int = Field(default=0, description="Total lines of code scanned across all files")
     parse_duration_ms: float = Field(default=0.0, description="Execution duration in milliseconds")

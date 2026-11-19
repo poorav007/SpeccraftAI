@@ -19,7 +19,8 @@ Accelerated Timeline: 10–12 Days Target
 - [x] Sample multi-file FastAPI codebase (`backend/samples/fastapi_shop_api/`): `main.py`, `models/schemas.py`, `routers/items.py`, `routers/orders.py`
 - [x] Unit test suite: 20/20 backend unit tests passing in ~0.12s (`test_models.py`, `test_reader.py`, `test_fastapi_parser.py`, `test_fastapi_shop_sample.py`)
 
-### Day 3: Extraction Pipeline, CLI & 10k-LOC Benchmark (NEXT)
+### Day 3: Diagnostics, Extraction Pipeline, CLI & 10k-LOC Benchmark (IN PROGRESS)
+- [x] F07: Standard Diagnostics & Warnings System (`backend/speccraft/diagnostics.py`, PRD Section 8 codes `SC-W001` to `SC-E002`, unit tests passing)
 - [ ] Pipeline orchestrator (`backend/speccraft/route_extractor.py`) & metadata mapper (`backend/speccraft/metadata_mapper.py`)
 - [ ] Command Line Interface (`backend/speccraft/cli.py`)
 - [ ] 10,000-line synthetic FastAPI benchmark test harness (`backend/tests/test_benchmark.py`) verifying `< 2.0s` parse time
