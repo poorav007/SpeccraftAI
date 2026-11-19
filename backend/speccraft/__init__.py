@@ -5,6 +5,12 @@ Static AST parser, schema extractor, validator, and spec diff engine.
 
 __version__ = "0.1.0"
 
+from speccraft.diagnostics import (
+    DIAGNOSTIC_CATALOG,
+    Diagnostic,
+    DiagnosticCode,
+    DiagnosticSeverity,
+)
 from speccraft.models import (
     APIEndpoint,
     ExtractionResult,
@@ -21,6 +27,10 @@ from speccraft.reader import SourceFileReader
 __all__ = [
     "__version__",
     "APIEndpoint",
+    "DIAGNOSTIC_CATALOG",
+    "Diagnostic",
+    "DiagnosticCode",
+    "DiagnosticSeverity",
     "ExtractionResult",
     "ExtractionWarning",
     "HTTPMethod",
