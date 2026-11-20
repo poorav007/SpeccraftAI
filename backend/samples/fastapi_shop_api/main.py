@@ -16,7 +16,7 @@ app.include_router(orders_router)
 
 
 @app.get("/health", tags=["system"], summary="Service Health Check")
-def health_check():
+def health_check() -> dict:
     """Returns system status and version info."""
     return {"status": "ok", "service": "fastapi-shop-api", "version": "1.0.0"}
 

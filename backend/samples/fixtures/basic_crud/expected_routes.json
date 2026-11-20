@@ -1,0 +1,23 @@
+[
+  {
+    "path": "/items",
+    "method": "get",
+    "operation_id": "list_items"
+  },
+  {
+    "path": "/items",
+    "method": "post",
+    "operation_id": "create_item"
+  },
+  {
+    "path": "/items/{item_id}",
+    "method": "get",
+    "operation_id": "get_item"
+  },
+  {
+    "path": "/items/{item_id}",
+    "method": "delete",
+    "operation_id": "delete_item"
+  }
+]
+

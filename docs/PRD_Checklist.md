@@ -19,11 +19,15 @@ Accelerated Timeline: 10–12 Days Target
 - [x] Sample multi-file FastAPI codebase (`backend/samples/fastapi_shop_api/`): `main.py`, `models/schemas.py`, `routers/items.py`, `routers/orders.py`
 - [x] Unit test suite: 20/20 backend unit tests passing in ~0.12s (`test_models.py`, `test_reader.py`, `test_fastapi_parser.py`, `test_fastapi_shop_sample.py`)
 
-### Day 3: Diagnostics, Extraction Pipeline, CLI & 10k-LOC Benchmark (IN PROGRESS)
+### Day 3: Diagnostics, Extraction Pipeline, CLI & 10k-LOC Benchmark (COMPLETE)
 - [x] F07: Standard Diagnostics & Warnings System (`backend/speccraft/diagnostics.py`, PRD Section 8 codes `SC-W001` to `SC-E002`, unit tests passing)
-- [ ] Pipeline orchestrator (`backend/speccraft/route_extractor.py`) & metadata mapper (`backend/speccraft/metadata_mapper.py`)
-- [ ] Command Line Interface (`backend/speccraft/cli.py`)
-- [ ] 10,000-line synthetic FastAPI benchmark test harness (`backend/tests/test_benchmark.py`) verifying `< 2.0s` parse time
+- [x] F02: Safe Zip Ingestion & Framework Detection (`backend/speccraft/reader.py`, Zip-Slip defense, file/size caps, unit tests passing)
+- [x] F03: Test Fixtures Suite (`backend/samples/fixtures/`, golden comparisons, `docs/FIXTURES.md`)
+- [x] F04, F05, F07: Static AST Parser enhancements (unannotated params, Depends, undeclared schemas, syntax errors, non-literal paths)
+- [x] F06: Pipeline orchestrator (`backend/speccraft/route_extractor.py`) & metadata mapper (`backend/speccraft/metadata_mapper.py`, path normalization, operationId collision resolution, deterministic sorting)
+- [x] Command Line Interface (`backend/speccraft/cli.py`, ASCII table, JSON output, diagnostics integration)
+- [x] F20: 10,000-line synthetic FastAPI benchmark test harness (`backend/tests/test_benchmark.py`) verifying `< 2.0s` parse time (achieved ~0.95s / 10,674 lines/sec)
+- [x] Backend unit test suite: 38/38 passing across all test modules
 
 ### Day 4: OpenAPI 3.0 Generation & Schema Validation
 - [ ] OpenAPI 3.0.3 YAML & JSON generator (`backend/speccraft/openapi_generator.py`)

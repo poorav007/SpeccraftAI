@@ -57,14 +57,16 @@ class PydanticSchemaExtractor:
 
     def extract_from_ast(self, tree: ast.AST) -> Dict[str, Dict[str, Any]]:
         """Scan AST tree for ClassDefs inheriting from BaseModel or Pydantic conventions."""
-        # First pass: collect model class names
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and self._is_pydantic_model(node):
+        class_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+
+        # Collect model class names first
+        for node in class_nodes:
+            if self._is_pydantic_model(node):
                 self.known_model_names.add(node.name)
 
-        # Second pass: extract schemas
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and self._is_pydantic_model(node):
+        # Extract schemas
+        for node in class_nodes:
+            if self._is_pydantic_model(node):
                 schema = self._parse_class_def(node)
                 self.schemas[node.name] = schema
 

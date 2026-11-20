@@ -11,6 +11,11 @@ from speccraft.diagnostics import (
     DiagnosticCode,
     DiagnosticSeverity,
 )
+from speccraft.metadata_mapper import (
+    map_and_normalize_endpoints,
+    normalize_route_path,
+    resolve_operation_id,
+)
 from speccraft.models import (
     APIEndpoint,
     ExtractionResult,
@@ -23,6 +28,7 @@ from speccraft.models import (
     SourceFile,
 )
 from speccraft.reader import SourceFileReader
+from speccraft.route_extractor import RouteExtractor
 
 __all__ = [
     "__version__",
@@ -38,7 +44,11 @@ __all__ = [
     "ParameterModel",
     "RequestBodyModel",
     "ResponseModel",
+    "RouteExtractor",
     "SourceFile",
     "SourceFileReader",
+    "map_and_normalize_endpoints",
+    "normalize_route_path",
+    "resolve_operation_id",
 ]
 
