@@ -42,8 +42,12 @@ Accelerated Timeline: 10–12 Days Target
 - [x] Connected React Screen 1 (`ProjectUploader.jsx`) with archive upload, code snippet mode, AST metrics card, and PRD diagnostic badges
 - [x] Unit test suites: 61/61 backend tests passing, 15/15 frontend tests passing
 
-### Day 6: Frontend Screen 2 (AST Analysis & Review)
-- [ ] Route Table component (`RouteTable.jsx`), Method filter badges, parameter inspector, editable metadata
+### Day 6: Frontend Screen 2 (AST Analysis & Review) (COMPLETE)
+- [x] Route Table component (`RouteTable.jsx`), HTTP method filter badges (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`), live search, and tag dropdown
+- [x] Parameter & Schema Inspector drawer (`ParameterInspector.jsx`) showing path/query params, request body, responses, and warnings
+- [x] In-place Metadata Editor drawer (`MetadataEditor.jsx`) with strict AST fact protection
+- [x] Global Screen Navigation bar (`Navbar.jsx`) with live route count badge and backend health indicator
+- [x] Pure utility suite (`routeHelpers.js`) and Vitest test suite (`routeHelpers.test.js`) 8/8 passing (total 23 frontend tests passing)
 
 ### Day 7: Frontend Screen 3 (Swagger UI & Spec Editor)
 - [ ] Swagger UI preview component (`SwaggerPreview.jsx`) & live Spec Editor (`SpecificationEditorPage.jsx`)
