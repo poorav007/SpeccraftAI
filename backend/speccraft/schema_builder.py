@@ -56,19 +56,58 @@ class PydanticSchemaExtractor:
         self.known_model_names: Set[str] = set()
 
     def extract_from_ast(self, tree: ast.AST) -> Dict[str, Dict[str, Any]]:
-        """Scan AST tree for ClassDefs inheriting from BaseModel or Pydantic conventions."""
-        # First pass: collect model class names
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and self._is_pydantic_model(node):
+        """Scan AST tree for ClassDefs inheriting from BaseModel, Schema, or Enum."""
+        class_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+
+        # Collect model and enum class names first
+        for node in class_nodes:
+            if self._is_pydantic_model(node) or self._is_enum(node):
                 self.known_model_names.add(node.name)
 
-        # Second pass: extract schemas
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and self._is_pydantic_model(node):
-                schema = self._parse_class_def(node)
-                self.schemas[node.name] = schema
+        # Extract schemas
+        for node in class_nodes:
+            if self._is_pydantic_model(node):
+                self.schemas[node.name] = self._parse_class_def(node)
+            elif self._is_enum(node):
+                self.schemas[node.name] = self._parse_enum_class(node)
 
         return self.schemas
+
+    def _is_enum(self, node: ast.ClassDef) -> bool:
+        """Check if class inherits from Enum, str+Enum, or IntEnum."""
+        for base in node.bases:
+            if isinstance(base, ast.Name) and base.id in ("Enum", "IntEnum", "StrEnum"):
+                return True
+            if isinstance(base, ast.Attribute) and base.attr in ("Enum", "IntEnum", "StrEnum"):
+                return True
+        return False
+
+    def _parse_enum_class(self, node: ast.ClassDef) -> Dict[str, Any]:
+        """Convert a Python Enum class AST node into an OpenAPI JSON Schema object."""
+        docstring = ast.get_docstring(node)
+        enum_values: List[Any] = []
+        is_int = any(
+            (isinstance(b, ast.Name) and b.id in ("int", "IntEnum"))
+            or (isinstance(b, ast.Attribute) and b.attr == "IntEnum")
+            for b in node.bases
+        )
+
+        for item in node.body:
+            if isinstance(item, ast.Assign) and item.value:
+                lit = _ast_to_literal(item.value)
+                if lit is not None:
+                    enum_values.append(lit)
+
+        enum_type = "integer" if is_int else "string"
+        schema: Dict[str, Any] = {
+            "title": node.name,
+            "type": enum_type,
+            "enum": enum_values,
+        }
+        if docstring:
+            schema["description"] = docstring.strip()
+
+        return schema
 
     def _is_pydantic_model(self, node: ast.ClassDef) -> bool:
         """Heuristic check if class inherits from BaseModel or has model characteristics."""

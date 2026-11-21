@@ -1,0 +1,11 @@
+{
+  "expected_endpoints": [
+    {
+      "path": "/modern",
+      "method": "get",
+      "operation_id": "modern_endpoint"
+    }
+  ],
+  "expected_diagnostic_codes": ["SC-W003"]
+}
+

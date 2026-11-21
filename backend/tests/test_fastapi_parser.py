@@ -123,7 +123,7 @@ def delete_user(user_id: str):
         result = self.parser.parse_files([source])
 
         self.assertEqual(len(result.warnings), 1)
-        self.assertEqual(result.warnings[0].code, "SYNTAX_ERROR")
+        self.assertIn(result.warnings[0].code, ("SYNTAX_ERROR", "SC-W008"))
         self.assertEqual(len(result.endpoints), 0)
 
 

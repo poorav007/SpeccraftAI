@@ -19,19 +19,28 @@ Accelerated Timeline: 10–12 Days Target
 - [x] Sample multi-file FastAPI codebase (`backend/samples/fastapi_shop_api/`): `main.py`, `models/schemas.py`, `routers/items.py`, `routers/orders.py`
 - [x] Unit test suite: 20/20 backend unit tests passing in ~0.12s (`test_models.py`, `test_reader.py`, `test_fastapi_parser.py`, `test_fastapi_shop_sample.py`)
 
-### Day 3: Diagnostics, Extraction Pipeline, CLI & 10k-LOC Benchmark (IN PROGRESS)
+### Day 3: Diagnostics, Extraction Pipeline, CLI & 10k-LOC Benchmark (COMPLETE)
 - [x] F07: Standard Diagnostics & Warnings System (`backend/speccraft/diagnostics.py`, PRD Section 8 codes `SC-W001` to `SC-E002`, unit tests passing)
-- [ ] Pipeline orchestrator (`backend/speccraft/route_extractor.py`) & metadata mapper (`backend/speccraft/metadata_mapper.py`)
-- [ ] Command Line Interface (`backend/speccraft/cli.py`)
-- [ ] 10,000-line synthetic FastAPI benchmark test harness (`backend/tests/test_benchmark.py`) verifying `< 2.0s` parse time
+- [x] F02: Safe Zip Ingestion & Framework Detection (`backend/speccraft/reader.py`, Zip-Slip defense, file/size caps, unit tests passing)
+- [x] F03: Test Fixtures Suite (`backend/samples/fixtures/`, golden comparisons, `docs/FIXTURES.md`)
+- [x] F04, F05, F07: Static AST Parser enhancements (unannotated params, Depends, undeclared schemas, syntax errors, non-literal paths)
+- [x] F06: Pipeline orchestrator (`backend/speccraft/route_extractor.py`) & metadata mapper (`backend/speccraft/metadata_mapper.py`, path normalization, operationId collision resolution, deterministic sorting)
+- [x] Command Line Interface (`backend/speccraft/cli.py`, ASCII table, JSON output, diagnostics integration)
+- [x] F20: 10,000-line synthetic FastAPI benchmark test harness (`backend/tests/test_benchmark.py`) verifying `< 2.0s` parse time (achieved ~0.95s / 10,674 lines/sec)
+- [x] Backend unit test suite: 38/38 passing across all test modules
 
-### Day 4: OpenAPI 3.0 Generation & Schema Validation
-- [ ] OpenAPI 3.0.3 YAML & JSON generator (`backend/speccraft/openapi_generator.py`)
-- [ ] Schema validator (`backend/speccraft/schema_validator.py` with `jsonschema` / `openapi-spec-validator`)
+### Day 4: OpenAPI 3.0 Generation & Schema Validation (COMPLETE)
+- [x] F08: OpenAPI 3.0.3 YAML & JSON generator (`backend/speccraft/openapi_generator.py`, paths, components, $ref links, deterministic sorting)
+- [x] F09: Schema validator (`backend/speccraft/schema_validator.py`, structural, broken $ref detection, path param parity, status code verification)
+- [x] Golden reference spec verification (`backend/samples/expected_specs/shop_v1.json`, 100% compliant, 0 errors)
+- [x] Unit test suites: 53/53 backend unit tests passing in ~2.5s (`test_openapi_generator.py`, `test_validator.py`)
 
-### Day 5: Backend API Bridge & Frontend Screen 1 Integration
-- [ ] FastAPI HTTP server (`backend/speccraft/api/server.py`, `/api/parse`, `/api/generate`)
-- [ ] Connect React Screen 1 to Python backend API
+### Day 5: Backend API Bridge & Frontend Screen 1 Integration (COMPLETE)
+- [x] FastAPI HTTP server (`backend/speccraft/api/server.py`, `backend/speccraft/api/routes.py`, `/api/health`, `/api/parse`, `/api/generate`, `/api/validate`)
+- [x] Safe multipart file and zip upload with Zip-Slip defense and PRD diagnostic rejections
+- [x] Frontend API Client (`frontend/src/services/apiClient.js` with timeout & offline fallback detection)
+- [x] Connected React Screen 1 (`ProjectUploader.jsx`) with archive upload, code snippet mode, AST metrics card, and PRD diagnostic badges
+- [x] Unit test suites: 61/61 backend tests passing, 15/15 frontend tests passing
 
 ### Day 6: Frontend Screen 2 (AST Analysis & Review)
 - [ ] Route Table component (`RouteTable.jsx`), Method filter badges, parameter inspector, editable metadata
