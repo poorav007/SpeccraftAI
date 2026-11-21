@@ -150,3 +150,29 @@ export async function validateOpenApiSpec(spec) {
   }
 }
 
+/**
+ * Compares two OpenAPI 3.0 specifications and returns structural differences.
+ *
+ * @param {object|string} baselineSpec - Baseline specification S1.
+ * @param {object|string} targetSpec - Target specification S2.
+ * @returns {Promise<{ ok: boolean, report?: object, error?: string }>}
+ */
+export async function compareOpenApiSpecs(baselineSpec, targetSpec) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/diff`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseline_spec: baselineSpec, target_spec: targetSpec }),
+    });
+
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `Diff failed (${res.status})` };
+    }
+    return { ok: true, report: body };
+  } catch (err) {
+    return { ok: false, error: err.message || "Failed to compare specifications." };
+  }
+}
+
+

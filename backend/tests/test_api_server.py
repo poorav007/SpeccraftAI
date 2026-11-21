@@ -170,6 +170,38 @@ def health(): return {'status': 'ok'}
         self.assertIn("Security Guard", response.json()["detail"])
 
 
+    def test_diff_spec_endpoint(self):
+        s1 = {
+            "openapi": "3.0.3",
+            "paths": {
+                "/users/{id}": {
+                    "delete": {"operationId": "delete_user", "responses": {"204": {"description": "OK"}}}
+                }
+            },
+        }
+        s2 = {
+            "openapi": "3.0.3",
+            "paths": {
+                "/users": {
+                    "get": {"operationId": "list_users", "responses": {"200": {"description": "OK"}}}
+                }
+            },
+        }
+
+        response = self.client.post(
+            "/api/diff",
+            json={"baseline_spec": s1, "target_spec": s2},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        summary = data["summary"]
+        self.assertEqual(summary["total_changes"], 2)
+        self.assertEqual(summary["breaking_changes"], 1)  # deleted endpoint is breaking
+        self.assertEqual(summary["non_breaking_changes"], 1)  # added endpoint is non-breaking
+        self.assertEqual(summary["removed_endpoints"], 1)
+        self.assertEqual(summary["added_endpoints"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
 

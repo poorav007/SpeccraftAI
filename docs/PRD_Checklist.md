@@ -56,9 +56,13 @@ Accelerated Timeline: 10–12 Days Target
 - [x] Live YAML and JSON format switching, clipboard copy, and spec download triggers
 - [x] Vitest test suite (`specEditor.test.js`) 3/3 passing (total 26 frontend tests passing)
 
-### Day 8: Spec Diff Engine
-- [ ] Breaking vs non-breaking change detection engine (`spec_diff_engine.py`)
-- [ ] Spec Diff Viewer UI (`SpecDiffViewer.jsx`, `SpecificationDiffPage.jsx`)
+### Day 8: Spec Diff Engine & Viewer (COMPLETE)
+- [x] F14: Specification Diff Engine (`backend/speccraft/diff_engine.py`) detecting operations, parameters, request bodies, and response code drift with deterministic breaking change classification (PRD §6 & §10)
+- [x] Backend REST endpoint `POST /api/diff` (`backend/speccraft/api/routes.py`, `backend/speccraft/models.py`)
+- [x] Comprehensive test suites: 8/8 diff engine tests passing (`backend/tests/test_diff_engine.py`, golden shop v1 vs v2 test)
+- [x] F15: Screen 4 Specification Diff Viewer (`frontend/src/pages/SpecificationDiffPage.jsx`, `frontend/src/components/diff/SpecDiffViewer.jsx`)
+- [x] Modern Web Guidance compliance: accessible horizontal table container (`tabindex="0" role="region" aria-labelledby="..."`), sticky headers, and dual-channel color-blind indicators (`🚨 BREAKING` vs `✓ NON-BREAKING`)
+- [x] Client-side diff utilities, search/filters, and offline fallback engine (`frontend/src/utils/diffHelpers.js`, 10/10 Vitest tests passing, 37 total frontend tests passing)
 
 ### Day 9: Export Center & Session Persistence
 - [ ] ExportManager (JSON, YAML, Postman v2.1 collection export)
