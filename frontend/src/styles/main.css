@@ -1,0 +1,110 @@
+/* SpecCraft AI - Global Styles & Components */
+
+/* HTTP Method Badges */
+.badge-method-get {
+  background-color: #0d6efd !important;
+  color: #ffffff !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.badge-method-post {
+  background-color: #198754 !important;
+  color: #ffffff !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.badge-method-put {
+  background-color: #fd7e14 !important;
+  color: #ffffff !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.badge-method-delete {
+  background-color: #dc3545 !important;
+  color: #ffffff !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.badge-method-patch {
+  background-color: #6f42c1 !important;
+  color: #ffffff !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.badge-method-other {
+  background-color: #6c757d !important;
+  color: #ffffff !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+}
+
+/* Route Table Styling */
+.route-row {
+  transition: background-color 0.15s ease-in-out;
+}
+
+.route-row:hover {
+  background-color: rgba(13, 110, 253, 0.04);
+}
+
+.path-param-highlight {
+  color: #d63384;
+  font-weight: 600;
+}
+
+/* Offcanvas / Side Drawer */
+.drawer-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 1040;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(650px, 94vw);
+  height: 100vh;
+  background-color: #ffffff;
+  box-shadow: -6px 0 24px rgba(0, 0, 0, 0.15);
+  z-index: 1050;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
