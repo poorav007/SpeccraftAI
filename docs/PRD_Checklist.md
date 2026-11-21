@@ -29,9 +29,11 @@ Accelerated Timeline: 10–12 Days Target
 - [x] F20: 10,000-line synthetic FastAPI benchmark test harness (`backend/tests/test_benchmark.py`) verifying `< 2.0s` parse time (achieved ~0.95s / 10,674 lines/sec)
 - [x] Backend unit test suite: 38/38 passing across all test modules
 
-### Day 4: OpenAPI 3.0 Generation & Schema Validation
-- [ ] OpenAPI 3.0.3 YAML & JSON generator (`backend/speccraft/openapi_generator.py`)
-- [ ] Schema validator (`backend/speccraft/schema_validator.py` with `jsonschema` / `openapi-spec-validator`)
+### Day 4: OpenAPI 3.0 Generation & Schema Validation (COMPLETE)
+- [x] F08: OpenAPI 3.0.3 YAML & JSON generator (`backend/speccraft/openapi_generator.py`, paths, components, $ref links, deterministic sorting)
+- [x] F09: Schema validator (`backend/speccraft/schema_validator.py`, structural, broken $ref detection, path param parity, status code verification)
+- [x] Golden reference spec verification (`backend/samples/expected_specs/shop_v1.json`, 100% compliant, 0 errors)
+- [x] Unit test suites: 53/53 backend unit tests passing in ~2.5s (`test_openapi_generator.py`, `test_validator.py`)
 
 ### Day 5: Backend API Bridge & Frontend Screen 1 Integration
 - [ ] FastAPI HTTP server (`backend/speccraft/api/server.py`, `/api/parse`, `/api/generate`)
