@@ -120,10 +120,16 @@ class RouteExtractor:
             parse_duration_ms=timer.duration_ms,
         )
 
-    def extract_from_code_string(self, code: str, virtual_name: str = "snippet.py") -> ExtractionResult:
+    def extract_from_code_string(
+        self,
+        code: str,
+        virtual_name: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> ExtractionResult:
         """Extract routes from a raw pasted code string (e.g. from Web UI)."""
+        target_name = virtual_name or filename or "snippet.py"
         with Timer() as timer:
-            source = self.reader.read_code_string(code, virtual_name)
+            source = self.reader.read_code_string(code, target_name)
             result = self.parser.parse_files([source])
             sorted_endpoints = map_and_normalize_endpoints(result.endpoints)
 

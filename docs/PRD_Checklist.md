@@ -35,9 +35,12 @@ Accelerated Timeline: 10–12 Days Target
 - [x] Golden reference spec verification (`backend/samples/expected_specs/shop_v1.json`, 100% compliant, 0 errors)
 - [x] Unit test suites: 53/53 backend unit tests passing in ~2.5s (`test_openapi_generator.py`, `test_validator.py`)
 
-### Day 5: Backend API Bridge & Frontend Screen 1 Integration
-- [ ] FastAPI HTTP server (`backend/speccraft/api/server.py`, `/api/parse`, `/api/generate`)
-- [ ] Connect React Screen 1 to Python backend API
+### Day 5: Backend API Bridge & Frontend Screen 1 Integration (COMPLETE)
+- [x] FastAPI HTTP server (`backend/speccraft/api/server.py`, `backend/speccraft/api/routes.py`, `/api/health`, `/api/parse`, `/api/generate`, `/api/validate`)
+- [x] Safe multipart file and zip upload with Zip-Slip defense and PRD diagnostic rejections
+- [x] Frontend API Client (`frontend/src/services/apiClient.js` with timeout & offline fallback detection)
+- [x] Connected React Screen 1 (`ProjectUploader.jsx`) with archive upload, code snippet mode, AST metrics card, and PRD diagnostic badges
+- [x] Unit test suites: 61/61 backend tests passing, 15/15 frontend tests passing
 
 ### Day 6: Frontend Screen 2 (AST Analysis & Review)
 - [ ] Route Table component (`RouteTable.jsx`), Method filter badges, parameter inspector, editable metadata
