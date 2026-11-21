@@ -1,0 +1,11 @@
+{
+  "expected_endpoints": [
+    {
+      "path": "/valid/path",
+      "method": "get",
+      "operation_id": "valid_endpoint"
+    }
+  ],
+  "expected_diagnostic_codes": ["SC-W001"]
+}
+
