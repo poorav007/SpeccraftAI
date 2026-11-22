@@ -139,3 +139,50 @@ class ExtractionResult(BaseModel):
     total_loc: int = Field(default=0, description="Total lines of code scanned across all files")
     parse_duration_ms: float = Field(default=0.0, description="Execution duration in milliseconds")
 
+
+class ChangeType(str, Enum):
+    """Classification of OpenAPI specification changes."""
+    ENDPOINT_ADDED = "endpoint_added"
+    ENDPOINT_REMOVED = "endpoint_removed"
+    PARAMETER_ADDED = "parameter_added"
+    PARAMETER_REMOVED = "parameter_removed"
+    PARAMETER_MODIFIED = "parameter_modified"
+    REQUEST_BODY_MODIFIED = "request_body_modified"
+    RESPONSE_CODE_ADDED = "response_code_added"
+    RESPONSE_CODE_REMOVED = "response_code_removed"
+    METADATA_MODIFIED = "metadata_modified"
+
+
+class DiffChangeRecord(BaseModel):
+    """Represents a single detected difference between two OpenAPI specifications."""
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    change_type: ChangeType = Field(description="Machine-readable change category")
+    path: str = Field(description="Endpoint URL path")
+    method: str = Field(description="HTTP method (e.g. 'get', 'post')")
+    is_breaking: bool = Field(description="True if change breaks backward compatibility for API consumers")
+    description: str = Field(description="Human-readable explanation of the change")
+    location: str = Field(description="JSON pointer or structural path in specification")
+    details: Dict[str, Any] = Field(default_factory=dict, description="Detailed before/after metadata")
+
+
+class DiffSummary(BaseModel):
+    """Aggregate statistics for a specification diff comparison."""
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    total_changes: int = 0
+    breaking_changes: int = 0
+    non_breaking_changes: int = 0
+    added_endpoints: int = 0
+    removed_endpoints: int = 0
+    modified_endpoints: int = 0
+
+
+class DiffReport(BaseModel):
+    """Full report returned by the SpecDiffEngine."""
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    summary: DiffSummary = Field(default_factory=DiffSummary)
+    changes: List[DiffChangeRecord] = Field(default_factory=list)
+
+

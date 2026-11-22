@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
+from speccraft.diff_engine import SpecDiffEngine
 from speccraft.models import ExtractionResult
 from speccraft.openapi_generator import OpenAPIGenerator
 from speccraft.reader import ArchiveSecurityError
@@ -42,6 +43,12 @@ class GenerateSpecRequest(BaseModel):
 class ValidateSpecRequest(BaseModel):
     """Request payload for OpenAPI 3.0 specification validation."""
     spec: Union[Dict[str, Any], str] = Field(..., description="OpenAPI specification as dictionary, JSON, or YAML string")
+
+
+class DiffRequest(BaseModel):
+    """Request payload for comparing two OpenAPI specifications."""
+    baseline_spec: Union[Dict[str, Any], str] = Field(..., description="Baseline OpenAPI specification (S1)")
+    target_spec: Union[Dict[str, Any], str] = Field(..., description="Target OpenAPI specification (S2)")
 
 
 @api_router.get("/health", summary="Health Check")
@@ -186,3 +193,22 @@ async def validate_openapi_spec(payload: ValidateSpecRequest) -> Dict[str, Any]:
     validator = OpenAPISchemaValidator()
     report = validator.validate(payload.spec)
     return report.model_dump()
+
+
+@api_router.post(
+    "/diff",
+    summary="Compare OpenAPI Specifications",
+    response_model=Dict[str, Any],
+)
+async def diff_openapi_specs(payload: DiffRequest) -> Dict[str, Any]:
+    """Compare baseline and target OpenAPI specifications and classify breaking vs non-breaking changes."""
+    engine = SpecDiffEngine()
+    try:
+        report = engine.compare(payload.baseline_spec, payload.target_spec)
+        return report.model_dump()
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to compare specifications: {ex}",
+        )
+

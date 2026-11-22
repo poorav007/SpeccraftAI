@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   checkBackendHealth,
+  compareOpenApiSpecs,
   generateOpenApiSpec,
   parseCodeSnippet,
   uploadAndParseArchive,
@@ -114,6 +115,28 @@ describe("apiClient service suite", () => {
     const res = await validateOpenApiSpec({ openapi: "3.0.3" });
     expect(res.ok).toBe(true);
     expect(res.report.is_valid).toBe(true);
+  });
+
+  it("compareOpenApiSpecs calls /diff endpoint", async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        baseline_version: "1.0.0",
+        target_version: "2.0.0",
+        summary: { total_changes: 2, breaking_changes: 1, non_breaking_changes: 1 },
+        changes: [],
+      }),
+    });
+
+    const res = await compareOpenApiSpecs({ openapi: "3.0.3" }, { openapi: "3.0.3" });
+    expect(res.ok).toBe(true);
+    expect(res.report.summary.total_changes).toBe(2);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/diff"),
+      expect.objectContaining({
+        method: "POST",
+      })
+    );
   });
 });
 

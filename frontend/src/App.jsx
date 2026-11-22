@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Navbar from "./components/common/Navbar.jsx";
 import AstAnalysisPage from "./pages/AstAnalysisPage.jsx";
 import CodebaseImportPage from "./pages/CodebaseImportPage.jsx";
+import SpecificationDiffPage from "./pages/SpecificationDiffPage.jsx";
 import SpecificationEditorPage from "./pages/SpecificationEditorPage.jsx";
 import { STORAGE_KEY, loadState, resetState, saveState } from "./utils/localStorage.js";
 import { updateEndpointMetadata } from "./utils/routeHelpers.js";
@@ -134,23 +135,10 @@ export default function App() {
         )}
 
         {activeScreen === "diff" && (
-          <div className="card shadow-sm border-0 text-center py-5 my-4">
-            <div className="card-body">
-              <span className="badge bg-warning-subtle text-warning-emphasis mb-2">Milestone: Day 8</span>
-              <h3 className="h4 fw-bold">Screen 4: Specification Diff Viewer</h3>
-              <p className="text-muted small mx-auto" style={{ maxWidth: "520px" }}>
-                Compare two OpenAPI specifications, detect breaking vs non-breaking changes,
-                and inspect diff reports in Day 8.
-              </p>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-secondary"
-                onClick={() => setActiveScreen("analysis")}
-              >
-                ← Back to AST Analysis (Screen 2)
-              </button>
-            </div>
-          </div>
+          <SpecificationDiffPage
+            currentSpec={state.specs?.["parsed-preview"] || null}
+            onNavigate={(screenId) => setActiveScreen(screenId)}
+          />
         )}
 
         {activeScreen === "export" && (
