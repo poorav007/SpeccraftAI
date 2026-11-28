@@ -67,13 +67,17 @@ def test_post_body_json_ref_resolution(shop_v1_spec):
     exporter = PostmanCollectionExporter()
     collection = exporter.convert(shop_v1_spec)
 
-    create_item = _find_request(collection, "POST", "/items")
-    req = create_item["request"]
+    create_order = _find_request(collection, "POST", "/orders")
+    req = create_order["request"]
     assert req["body"]["mode"] == "raw"
     parsed_body = json.loads(req["body"]["raw"])
     assert isinstance(parsed_body, dict)
-    assert "name" in parsed_body
-    assert "price" in parsed_body
+    assert "customer_email" in parsed_body
+    assert "shipping_address" in parsed_body
+    assert "items" in parsed_body
+    assert isinstance(parsed_body["items"], list)
+    assert len(parsed_body["items"]) == 1
+    assert "item_id" in parsed_body["items"][0]
     assert any(
         h["key"].lower() == "content-type" and h["value"] == "application/json"
         for h in req["header"]
