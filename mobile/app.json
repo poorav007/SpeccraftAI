@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "SpecCraft Review",
+    "slug": "speccraft-review",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "supportsTablet": true
+    }
+  }
+}
+

@@ -1,0 +1,29 @@
+{
+  "executive_summary": "Detected 3 API changes between FastAPI Shop v1.0.0 and v2.0.0 including 2 breaking changes requiring consumer migration.",
+  "risk_level": "medium",
+  "provider": "offline",
+  "cards": [
+    {
+      "endpoint": "POST /orders",
+      "severity": "breaking",
+      "one_line_impact": "Added required parameter shipping_tier; legacy checkout clients will receive 422.",
+      "before": "none",
+      "after": "{\"name\": \"shipping_tier\", \"required\": true}"
+    },
+    {
+      "endpoint": "DELETE /legacy/items/{item_id}",
+      "severity": "breaking",
+      "one_line_impact": "Removed deprecated item deletion route completely.",
+      "before": "DELETE /legacy/items/{item_id}",
+      "after": "none"
+    },
+    {
+      "endpoint": "GET /items",
+      "severity": "non_breaking",
+      "one_line_impact": "Added optional query filter category_slug with default null.",
+      "before": "none",
+      "after": "{\"name\": \"category_slug\", \"required\": false}"
+    }
+  ]
+}
+
