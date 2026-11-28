@@ -1,0 +1,48 @@
+name: SpecCraft API Diff & Mobile Card Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/speccraft/**"
+      - "backend/samples/**"
+  workflow_dispatch:
+    inputs:
+      fail_on_breaking:
+        description: "Fail workflow (exit 1) when breaking changes are found in demo diff"
+        required: false
+        default: "false"
+        type: string
+
+jobs:
+  api-diff-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run SpecCraft CLI Diff (AST + Breaking Change Cards)
+        working-directory: backend
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.fail_on_breaking }}" = "true" ]; then
+            FLAGS="--fail-on-breaking"
+          fi
+          python -m speccraft.cli diff samples/expected_specs/shop_v1.json samples/expected_specs/shop_v2.json --cards-out cards.json --summary-out diff_summary.md $FLAGS
+          cat diff_summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Mobile Review Cards Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speccraft-diff-cards
+          path: backend/cards.json
+
