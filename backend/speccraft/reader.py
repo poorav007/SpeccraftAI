@@ -227,25 +227,41 @@ class SourceFileReader:
 
     @staticmethod
     def detect_framework(source_files: List[SourceFile]) -> str:
-        """Scan source files for framework imports (FastAPI).
+        """Scan source files for supported frameworks (FastAPI, Flask, Express).
 
         Returns:
-            'fastapi' if FastAPI imports detected, else 'unsupported'.
+            'fastapi', 'flask', 'express', 'mixed', or 'unsupported'.
         """
+        detected: Set[str] = set()
+
         for sf in source_files:
-            if "fastapi" not in sf.content.lower():
-                continue
-            try:
-                tree = ast.parse(sf.content, filename=sf.relative_path)
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.Import):
-                        for alias in node.names:
-                            if alias.name.lower() == "fastapi":
-                                return "fastapi"
-                    elif isinstance(node, ast.ImportFrom):
-                        if node.module and node.module.lower().startswith("fastapi"):
-                            return "fastapi"
-            except SyntaxError:
+            lower_path = sf.relative_path.lower()
+            lower_content = sf.content.lower()
+
+            if lower_path.endswith((".js", ".mjs", ".ts")):
+                if "express" in lower_content or ".get(" in lower_content or ".post(" in lower_content:
+                    detected.add("express")
                 continue
 
-        return "unsupported"
+            if "fastapi" in lower_content or "flask" in lower_content:
+                try:
+                    tree = ast.parse(sf.content, filename=sf.relative_path)
+                    for node in ast.walk(tree):
+                        names: List[str] = []
+                        if isinstance(node, ast.Import):
+                            names = [a.name.lower() for a in node.names]
+                        elif isinstance(node, ast.ImportFrom) and node.module:
+                            names = [node.module.lower()]
+                        for name in names:
+                            if name == "fastapi" or name.startswith("fastapi."):
+                                detected.add("fastapi")
+                            elif name == "flask" or name.startswith("flask."):
+                                detected.add("flask")
+                except SyntaxError:
+                    continue
+
+        if not detected:
+            return "unsupported"
+        if len(detected) == 1:
+            return next(iter(detected))
+        return "mixed"

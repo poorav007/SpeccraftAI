@@ -10,9 +10,11 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Union
 
 import yaml
+
+from speccraft.exporters.schema_sampler import sample_value_from_schema
 
 POSTMAN_V2_1_SCHEMA = (
     "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -180,7 +182,7 @@ class PostmanCollectionExporter:
                 postman_segments.append(f":{var_name}")
                 p_def = param_lookup.get((var_name, "path"), {})
                 p_schema = p_def.get("schema") or {}
-                sample_val = self._sample_value(p_schema, schemas)
+                sample_val = sample_value_from_schema(p_schema, schemas)
                 path_vars.append(
                     {
                         "key": var_name,
@@ -196,7 +198,7 @@ class PostmanCollectionExporter:
             if param.get("in") != "query":
                 continue
             p_schema = param.get("schema") or {}
-            sample_val = self._sample_value(p_schema, schemas)
+            sample_val = sample_value_from_schema(p_schema, schemas)
             query_params.append(
                 {
                     "key": str(param.get("name", "")),
@@ -275,7 +277,7 @@ class PostmanCollectionExporter:
         schema = json_media.get("schema") or {}
         example_payload = json_media.get("example")
         if example_payload is None:
-            example_payload = self._sample_value(schema, schemas)
+            example_payload = sample_value_from_schema(schema, schemas)
         if example_payload is None:
             example_payload = {}
 
@@ -284,68 +286,4 @@ class PostmanCollectionExporter:
             "raw": json.dumps(example_payload, indent=2, ensure_ascii=False),
             "options": {"raw": {"language": "json"}},
         }
-
-    def _sample_value(
-        self,
-        schema: Dict[str, Any],
-        schemas: Dict[str, Any],
-        visited: Optional[Set[str]] = None,
-    ) -> Any:
-        """Generate a deterministic sample value from an OpenAPI JSON Schema."""
-        if not isinstance(schema, dict):
-            return None
-
-        visited = set(visited or set())
-
-        if "$ref" in schema:
-            ref = str(schema["$ref"])
-            if ref in visited:
-                return {}
-            visited.add(ref)
-            ref_name = ref.split("/")[-1]
-            target = schemas.get(ref_name)
-            if isinstance(target, dict):
-                return self._sample_value(target, schemas, visited)
-            return {}
-
-        if "example" in schema:
-            return schema["example"]
-        if "default" in schema:
-            return schema["default"]
-        if isinstance(schema.get("enum"), list) and schema["enum"]:
-            return schema["enum"][0]
-
-        for combiner in ("anyOf", "oneOf"):
-            variants = schema.get(combiner)
-            if isinstance(variants, list) and variants:
-                for variant in variants:
-                    if isinstance(variant, dict) and variant.get("type") != "null":
-                        return self._sample_value(variant, schemas, visited)
-
-        schema_type = schema.get("type")
-        if schema_type == "object" or "properties" in schema:
-            props = schema.get("properties") or {}
-            return {
-                prop_name: self._sample_value(prop_schema, schemas, visited)
-                for prop_name, prop_schema in props.items()
-            }
-        if schema_type == "array":
-            item_schema = schema.get("items") or {"type": "string"}
-            return [self._sample_value(item_schema, schemas, visited)]
-        if schema_type == "integer":
-            return 1
-        if schema_type == "number":
-            return 1.0
-        if schema_type == "boolean":
-            return True
-        if schema_type == "string":
-            fmt = schema.get("format")
-            if fmt == "email":
-                return "user@example.com"
-            if fmt == "date-time":
-                return "2026-01-01T00:00:00Z"
-            if fmt == "uuid":
-                return "00000000-0000-0000-0000-000000000000"
-            return "string"
-        return "string"
 

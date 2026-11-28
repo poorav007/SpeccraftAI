@@ -418,4 +418,44 @@ export async function exportHandoffHtml(
   }
 }
 
+/**
+ * Generates TypeScript or Python client SDK code from an OpenAPI spec.
+ */
+export async function exportSdkCode(spec, language = "typescript") {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/export/sdk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spec, language }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `SDK generation failed (${res.status})` };
+    }
+    return { ok: true, files: body.files };
+  } catch (err) {
+    return { ok: false, error: err.message || "SDK generator unreachable." };
+  }
+}
+
+/**
+ * Generates a standalone runnable FastAPI mock_server.py from an OpenAPI spec.
+ */
+export async function exportMockServer(spec) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/export/mock-server`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spec }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `Mock server generation failed (${res.status})` };
+    }
+    return { ok: true, filename: body.filename, code: body.code };
+  } catch (err) {
+    return { ok: false, error: err.message || "Mock server generator unreachable." };
+  }
+}
+
 

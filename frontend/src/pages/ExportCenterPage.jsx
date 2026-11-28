@@ -4,7 +4,9 @@ import { SAMPLE_SHOP_V1 } from "../config/sampleSpecs.js";
 import {
   exportBundleZip,
   exportHandoffHtml,
+  exportMockServer,
   exportPostmanCollection,
+  exportSdkCode,
   exportSpecYaml,
   validateOpenApiSpec,
 } from "../services/apiClient.js";
@@ -195,6 +197,31 @@ export default function ExportCenterPage({
     }
   }
 
+  async function handleDownloadSdk(language) {
+    setIsExporting(true);
+    const res = await exportSdkCode(spec, language);
+    setIsExporting(false);
+    if (res.ok && res.files) {
+      const [filename, code] = Object.entries(res.files)[0];
+      downloadTextFile(code, filename, "text/plain;charset=utf-8");
+      setStatusNotice({ type: "success", text: `Downloaded ${filename} (${language} SDK)` });
+    } else {
+      setStatusNotice({ type: "warning", text: `SDK export requires Python backend (${res.error}).` });
+    }
+  }
+
+  async function handleDownloadMockServer() {
+    setIsExporting(true);
+    const res = await exportMockServer(spec);
+    setIsExporting(false);
+    if (res.ok && res.code) {
+      downloadTextFile(res.code, res.filename || "mock_server.py", "text/x-python;charset=utf-8");
+      setStatusNotice({ type: "success", text: "Downloaded mock_server.py (run: python mock_server.py)" });
+    } else {
+      setStatusNotice({ type: "warning", text: `Mock server export requires Python backend (${res.error}).` });
+    }
+  }
+
   const previewMap = {
     json: jsonText,
     yaml: yamlText,
@@ -270,6 +297,8 @@ export default function ExportCenterPage({
           onBrandNameChange={setBrandName}
           onPrintHandoff={handlePrintHandoff}
           onDownloadHandoffHtml={handleDownloadHandoffHtml}
+          onDownloadSdk={handleDownloadSdk}
+          onDownloadMockServer={handleDownloadMockServer}
         />
       </div>
 

@@ -29,8 +29,8 @@ DEFAULT_IGNORE_DIRS: Set[str] = {
     ".vscode",
 }
 
-# Supported file extensions for backend AST analysis
-ALLOWED_EXTENSIONS: Set[str] = {".py"}
+# Supported file extensions for backend static AST / route analysis
+ALLOWED_EXTENSIONS: Set[str] = {".py", ".js", ".mjs", ".ts"}
 
 # Maximum file sizes for security (anti-DoS)
 MAX_FILE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB per file

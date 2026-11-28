@@ -54,8 +54,18 @@ class TestZipReaderAndFrameworkDetection(unittest.TestCase):
         framework = self.reader.detect_framework([sf1, sf2])
         self.assertEqual(framework, "fastapi")
 
+    def test_detect_framework_flask_and_express(self):
+        sf_flask = self.reader.read_code_string("import flask\napp = flask.Flask(__name__)")
+        self.assertEqual(self.reader.detect_framework([sf_flask]), "flask")
+
+        sf_js = self.reader.read_code_string(
+            "const express = require('express'); const app = express(); app.get('/hi', () => {});",
+            virtual_name="app.js",
+        )
+        self.assertEqual(self.reader.detect_framework([sf_js]), "express")
+
     def test_detect_framework_unsupported(self):
-        sf1 = self.reader.read_code_string("import flask\napp = flask.Flask(__name__)")
+        sf1 = self.reader.read_code_string("import django\nurlpatterns = []")
         sf2 = self.reader.read_code_string("def hello(): return 'world'")
         framework = self.reader.detect_framework([sf1, sf2])
         self.assertEqual(framework, "unsupported")

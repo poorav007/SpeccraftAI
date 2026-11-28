@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from speccraft.ai import DiffSummaryProposal, get_enricher_service
 from speccraft.diff_engine import SpecDiffEngine
+from speccraft.exporters import MockServerGenerator, SDKGenerator
 from speccraft.exporters.postman_exporter import parse_openapi_input
 from speccraft.models import DiffReport
 from speccraft.openapi_generator import OpenAPIGenerator
@@ -85,6 +86,11 @@ def _run_extract_cli(argv: List[str]) -> int:
         action="store_true",
         help="Output raw JSON format instead of human-readable table.",
     )
+    parser.add_argument(
+        "--incremental",
+        action="store_true",
+        help="Enable SHA-256 incremental AST caching across unchanged files.",
+    )
 
     args = parser.parse_args(argv)
     target_path = Path(args.target).resolve()
@@ -97,7 +103,7 @@ def _run_extract_cli(argv: List[str]) -> int:
     if target_path.suffix.lower() == ".zip":
         result = extractor.extract_from_zip(target_path)
     else:
-        result = extractor.extract_from_path(target_path)
+        result = extractor.extract_from_path(target_path, incremental=args.incremental)
 
     if args.json:
         print(result.model_dump_json(indent=2))
@@ -211,11 +217,64 @@ def _run_diff_cli(argv: List[str]) -> int:
     return 0
 
 
+def _run_sdk_cli(argv: List[str]) -> int:
+    """Generate TypeScript or Python client SDK from an OpenAPI spec."""
+    parser = argparse.ArgumentParser(prog="speccraft sdk")
+    parser.add_argument("spec", type=str, help="Path to OpenAPI JSON/YAML spec.")
+    parser.add_argument("--lang", choices=["typescript", "python"], default="typescript")
+    parser.add_argument("--out", type=str, default=None, help="Output file path.")
+    args = parser.parse_args(argv)
+
+    spec_path = Path(args.spec).resolve()
+    if not spec_path.exists():
+        print(f"Error: Spec path does not exist: {spec_path}", file=sys.stderr)
+        return 1
+
+    files = SDKGenerator().generate(spec_path.read_text(encoding="utf-8"), language=args.lang)
+    fname, code = next(iter(files.items()))
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(code, encoding="utf-8")
+        print(f"Wrote {args.lang} SDK ({fname}) to {out_path}")
+    else:
+        print(code)
+    return 0
+
+
+def _run_mock_cli(argv: List[str]) -> int:
+    """Generate standalone runnable FastAPI mock_server.py from an OpenAPI spec."""
+    parser = argparse.ArgumentParser(prog="speccraft mock")
+    parser.add_argument("spec", type=str, help="Path to OpenAPI JSON/YAML spec.")
+    parser.add_argument("--out", type=str, default=None, help="Output file path.")
+    args = parser.parse_args(argv)
+
+    spec_path = Path(args.spec).resolve()
+    if not spec_path.exists():
+        print(f"Error: Spec path does not exist: {spec_path}", file=sys.stderr)
+        return 1
+
+    code = MockServerGenerator().to_fastapi_mock_code(spec_path.read_text(encoding="utf-8"))
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(code, encoding="utf-8")
+        print(f"Wrote FastAPI mock server to {out_path}")
+    else:
+        print(code)
+    return 0
+
+
 def run_cli(argv: Optional[List[str]] = None) -> int:
-    """Entry point supporting both `speccraft <target>` and `speccraft diff ...`."""
+    """Entry point supporting `speccraft <target>`, `diff`, `sdk`, and `mock`."""
     raw_argv = list(sys.argv[1:] if argv is None else argv)
-    if raw_argv[:1] == ["diff"]:
+    cmd = raw_argv[:1]
+    if cmd == ["diff"]:
         return _run_diff_cli(raw_argv[1:])
+    if cmd == ["sdk"]:
+        return _run_sdk_cli(raw_argv[1:])
+    if cmd == ["mock"]:
+        return _run_mock_cli(raw_argv[1:])
     return _run_extract_cli(raw_argv)
 
 

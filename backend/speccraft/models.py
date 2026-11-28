@@ -142,6 +142,8 @@ class ExtractionResult(BaseModel):
         default_factory=list,
         description="Saved overlay keys (METHOD /path) that no longer match any extracted route",
     )
+    cache_hits: int = Field(default=0, description="Files reused from incremental SHA-256 AST cache")
+    cache_misses: int = Field(default=0, description="Files freshly parsed during extraction")
 
 
 class ChangeType(str, Enum):
