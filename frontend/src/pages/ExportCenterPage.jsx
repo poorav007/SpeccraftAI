@@ -3,11 +3,13 @@ import ExportControls from "../components/export/ExportControls.jsx";
 import { SAMPLE_SHOP_V1 } from "../config/sampleSpecs.js";
 import {
   exportBundleZip,
+  exportHandoffHtml,
   exportPostmanCollection,
   exportSpecYaml,
   validateOpenApiSpec,
 } from "../services/apiClient.js";
 import {
+  buildHandoffHtml,
   convertObjectToYaml,
   convertOpenApiToPostman,
   copyTextToClipboard,
@@ -32,6 +34,7 @@ export default function ExportCenterPage({
   const [yamlText, setYamlText] = useState("");
   const [postmanObj, setPostmanObj] = useState(null);
   const [validationReport, setValidationReport] = useState(null);
+  const [brandName, setBrandName] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [statusNotice, setStatusNotice] = useState(null);
 
@@ -154,6 +157,44 @@ export default function ExportCenterPage({
     }
   }
 
+  async function resolveHandoffHtml() {
+    const cleanBrand = brandName.trim() || "SpecCraft AI";
+    const res = await exportHandoffHtml(spec, {
+      validationReport,
+      brandName: cleanBrand,
+    });
+    if (res.ok && res.html) return res.html;
+    return buildHandoffHtml(specObject || spec, validationReport, cleanBrand);
+  }
+
+  async function handleDownloadHandoffHtml() {
+    setIsExporting(true);
+    const htmlDoc = await resolveHandoffHtml();
+    setIsExporting(false);
+    downloadTextFile(htmlDoc, "client-api-handoff.html", "text/html;charset=utf-8");
+    setStatusNotice({ type: "success", text: "Downloaded client-api-handoff.html" });
+  }
+
+  async function handlePrintHandoff() {
+    setIsExporting(true);
+    const htmlDoc = await resolveHandoffHtml();
+    setIsExporting(false);
+    const printWin = window.open("", "_blank");
+    if (printWin) {
+      printWin.document.open();
+      printWin.document.write(htmlDoc);
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => printWin.print(), 200);
+    } else {
+      downloadTextFile(htmlDoc, "client-api-handoff.html", "text/html;charset=utf-8");
+      setStatusNotice({
+        type: "info",
+        text: "Popup blocked — downloaded client-api-handoff.html; open it in your browser and press Ctrl+P / Cmd+P to save as PDF.",
+      });
+    }
+  }
+
   const previewMap = {
     json: jsonText,
     yaml: yamlText,
@@ -225,6 +266,10 @@ export default function ExportCenterPage({
           }
           onCopyReport={() => copyTextToClipboard(reportMarkdown)}
           onDownloadBundle={handleBundleDownload}
+          brandName={brandName}
+          onBrandNameChange={setBrandName}
+          onPrintHandoff={handlePrintHandoff}
+          onDownloadHandoffHtml={handleDownloadHandoffHtml}
         />
       </div>
 

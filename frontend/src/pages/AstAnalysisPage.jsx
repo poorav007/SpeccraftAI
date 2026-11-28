@@ -11,6 +11,8 @@ export default function AstAnalysisPage({
   schemas = {},
   metrics = null,
   diagnostics = [],
+  orphanedOverlayKeys = [],
+  onDismissOrphanedKey,
   onUpdateEndpoint,
   onNavigate,
 }) {
@@ -82,6 +84,31 @@ export default function AstAnalysisPage({
             aria-label="Close"
             onClick={() => setSaveToast(null)}
           />
+        </div>
+      )}
+
+      {/* Orphaned Overlay Warning (detects renamed/deleted routes in speccraft.overlay.json) */}
+      {orphanedOverlayKeys.length > 0 && (
+        <div className="alert alert-warning py-2 px-3 small mb-3" role="alert">
+          <div className="fw-bold mb-1">
+            ⚠️ {orphanedOverlayKeys.length} saved doc(s) in <code>speccraft.overlay.json</code> no longer match an extracted route:
+          </div>
+          <div className="d-flex flex-wrap gap-2">
+            {orphanedOverlayKeys.map((key) => (
+              <span key={key} className="badge bg-light text-dark border d-inline-flex align-items-center gap-2 py-1 px-2">
+                <code>{key}</code>
+                {onDismissOrphanedKey && (
+                  <button
+                    type="button"
+                    className="btn-close"
+                    style={{ fontSize: "9px" }}
+                    aria-label={`Remove stale overlay ${key}`}
+                    onClick={() => onDismissOrphanedKey(key)}
+                  />
+                )}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
