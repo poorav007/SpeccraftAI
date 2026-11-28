@@ -8,13 +8,18 @@ from __future__ import annotations
 
 import io
 import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from speccraft.ai import get_enricher_service
 from speccraft.diff_engine import SpecDiffEngine
-from speccraft.exporters import ExportManager, PostmanCollectionExporter
+from speccraft.exporters import (
+    ExportManager,
+    MockServerGenerator,
+    PostmanCollectionExporter,
+    SDKGenerator,
+)
 from speccraft.models import ExtractionResult
 from speccraft.openapi_generator import OpenAPIGenerator
 from speccraft.overlay import OverlayEntry, get_overlay_store, make_overlay_key
@@ -67,6 +72,12 @@ class ExportSpecRequest(BaseModel):
     )
 
 
+class ExportSDKRequest(BaseModel):
+    """Request payload for generating TypeScript or Python client SDKs."""
+    spec: Union[Dict[str, Any], str] = Field(..., description="OpenAPI 3.0 specification")
+    language: Literal["typescript", "python"] = Field(default="typescript")
+
+
 class OverlayUpsertRequest(BaseModel):
     """Request payload for saving non-destructive endpoint documentation."""
     method: str = Field(..., description="HTTP method (used in METHOD /path key)")
@@ -114,13 +125,16 @@ async def health_check() -> Dict[str, Any]:
         "status": "healthy",
         "service": "speccraft-api-bridge",
         "version": "0.1.0",
-        "supported_frameworks": ["fastapi", "express"],
+        "supported_frameworks": ["fastapi", "flask", "express"],
         "capabilities": [
             "ast_extraction",
             "openapi_generation",
             "schema_validation",
             "postman_export",
             "ai_enrichment",
+            "sdk_generation",
+            "mock_server_generation",
+            "incremental_caching",
         ],
     }
 
@@ -440,4 +454,40 @@ async def delete_overlay_entry(key: str) -> Dict[str, Any]:
     """Delete an overlay entry by canonical key (`METHOD /path`)."""
     doc = get_overlay_store().delete_entry(key)
     return {"deleted_key": key, "overlay": doc.model_dump()}
+
+
+@api_router.post(
+    "/export/sdk",
+    summary="Generate TypeScript or Python API Client SDK",
+    response_model=Dict[str, Any],
+)
+async def export_sdk_code(payload: ExportSDKRequest) -> Dict[str, Any]:
+    """Generate a typed TypeScript or Python client SDK from an OpenAPI specification."""
+    generator = SDKGenerator()
+    try:
+        files = generator.generate(payload.spec, language=payload.language)
+        return {"language": payload.language, "files": files}
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to generate SDK: {ex}",
+        )
+
+
+@api_router.post(
+    "/export/mock-server",
+    summary="Generate Standalone FastAPI Mock API Server",
+    response_model=Dict[str, Any],
+)
+async def export_mock_server(payload: ExportSpecRequest) -> Dict[str, Any]:
+    """Generate a runnable mock_server.py from an OpenAPI specification."""
+    generator = MockServerGenerator()
+    try:
+        code = generator.to_fastapi_mock_code(payload.spec)
+        return {"filename": "mock_server.py", "code": code}
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to generate mock server: {ex}",
+        )
 

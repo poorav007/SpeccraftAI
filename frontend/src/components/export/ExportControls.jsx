@@ -16,6 +16,8 @@ export default function ExportControls({
   onDownloadBundle,
   onPrintHandoff,
   onDownloadHandoffHtml,
+  onDownloadSdk,
+  onDownloadMockServer,
   brandName = "",
   onBrandNameChange,
   isExporting = false,
@@ -160,6 +162,38 @@ export default function ExportControls({
                   </button>
                 )}
               </div>
+            )}
+
+            {onDownloadSdk && (
+              <div className="d-flex align-items-center gap-2">
+                <button
+                  type="button"
+                  className="btn btn-outline-primary btn-sm"
+                  onClick={() => onDownloadSdk("typescript")}
+                  disabled={isExporting}
+                >
+                  ⬇ TypeScript SDK (.ts)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline-primary btn-sm"
+                  onClick={() => onDownloadSdk("python")}
+                  disabled={isExporting}
+                >
+                  ⬇ Python SDK (.py)
+                </button>
+              </div>
+            )}
+
+            {onDownloadMockServer && (
+              <button
+                type="button"
+                className="btn btn-outline-success btn-sm"
+                onClick={onDownloadMockServer}
+                disabled={isExporting}
+              >
+                🧪 Mock Server (.py)
+              </button>
             )}
 
             {onDownloadBundle && (
