@@ -16,6 +16,18 @@ const DEFAULT_TIMEOUT_MS = 15000;
 async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
+  const externalSignal = options.signal;
+
+  function onExternalAbort() {
+    controller.abort();
+  }
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
 
   try {
     const response = await fetch(url, {
@@ -27,9 +39,16 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_M
   } catch (err) {
     clearTimeout(id);
     if (err.name === "AbortError") {
+      if (externalSignal?.aborted) {
+        const abortErr = new Error("Request aborted.");
+        abortErr.name = "AbortError";
+        throw abortErr;
+      }
       throw new Error(`Request timed out after ${timeoutMs}ms.`);
     }
     throw err;
+  } finally {
+    externalSignal?.removeEventListener("abort", onExternalAbort);
   }
 }
 
@@ -246,6 +265,81 @@ export async function exportBundleZip(spec, validationReport = null) {
     return { ok: true, blob };
   } catch (err) {
     return { ok: false, error: err.message || "Failed to download export bundle." };
+  }
+}
+
+/**
+ * Requests AI endpoint documentation proposal with optional AbortSignal.
+ */
+export async function enrichEndpointDocs(endpoint, { signal } = {}) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/ai/enrich-endpoint`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        method: endpoint?.method || "get",
+        path: endpoint?.path || "/",
+        operation_id: endpoint?.operation_id || null,
+        summary: endpoint?.summary || null,
+        description: endpoint?.description || null,
+        tags: endpoint?.tags || [],
+        parameters: endpoint?.parameters || [],
+        request_body: endpoint?.request_body || null,
+      }),
+      signal,
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `AI enrich failed (${res.status})` };
+    }
+    return { ok: true, proposal: body };
+  } catch (err) {
+    return { ok: false, aborted: err.name === "AbortError", error: err.message || "AI service unreachable." };
+  }
+}
+
+/**
+ * Requests plain-language explanation for a schema attribute or parameter.
+ */
+export async function explainSchemaField(fieldPayload, { signal } = {}) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/ai/explain-schema`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fieldPayload),
+      signal,
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `AI explain failed (${res.status})` };
+    }
+    return { ok: true, explanation: body };
+  } catch (err) {
+    return { ok: false, aborted: err.name === "AbortError", error: err.message || "AI service unreachable." };
+  }
+}
+
+/**
+ * Summarizes specification diff changes and returns mobile-ready cards array.
+ */
+export async function summarizeSpecDiff(diffReport, { signal } = {}) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/ai/summarize-diff`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        summary: diffReport?.summary || {},
+        changes: diffReport?.changes || [],
+      }),
+      signal,
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `AI diff summary failed (${res.status})` };
+    }
+    return { ok: true, report: body };
+  } catch (err) {
+    return { ok: false, aborted: err.name === "AbortError", error: err.message || "AI service unreachable." };
   }
 }
 

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
+from speccraft.ai import get_enricher_service
 from speccraft.diff_engine import SpecDiffEngine
 from speccraft.exporters import ExportManager, PostmanCollectionExporter
 from speccraft.models import ExtractionResult
@@ -61,6 +62,35 @@ class ExportSpecRequest(BaseModel):
     )
 
 
+class EnrichEndpointRequest(BaseModel):
+    """Request payload for AI endpoint documentation enrichment."""
+    method: str = Field(..., description="HTTP method (immutable AST fact)")
+    path: str = Field(..., description="Endpoint path template (immutable AST fact)")
+    operation_id: Optional[str] = Field(default=None)
+    summary: Optional[str] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    tags: List[str] = Field(default_factory=list)
+    parameters: List[Dict[str, Any]] = Field(default_factory=list)
+    request_body: Optional[Dict[str, Any]] = Field(default=None)
+
+
+class ExplainSchemaFieldRequest(BaseModel):
+    """Request payload for plain-language explanation of a schema/parameter field."""
+    field_name: str = Field(..., description="Field or parameter name")
+    field_type: str = Field(default="string", description="Data type")
+    location: str = Field(default="body", description="Parameter or body location")
+    required: bool = Field(default=False)
+    endpoint_path: str = Field(default="")
+    endpoint_method: str = Field(default="")
+    existing_description: Optional[str] = Field(default=None)
+
+
+class SummarizeDiffRequest(BaseModel):
+    """Request payload for AI diff summarization and mobile card generation."""
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    changes: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 @api_router.get("/health", summary="Health Check")
 async def health_check() -> Dict[str, Any]:
     """Returns backend service health status, version, and supported framework capabilities."""
@@ -74,6 +104,7 @@ async def health_check() -> Dict[str, Any]:
             "openapi_generation",
             "schema_validation",
             "postman_export",
+            "ai_enrichment",
         ],
     }
 
@@ -284,4 +315,40 @@ async def export_documentation_bundle(payload: ExportSpecRequest) -> Response:
             "Content-Disposition": 'attachment; filename="speccraft-export-bundle.zip"'
         },
     )
+
+
+@api_router.post(
+    "/ai/enrich-endpoint",
+    summary="Suggest OpenAPI Endpoint Documentation with AI",
+    response_model=Dict[str, Any],
+)
+async def ai_enrich_endpoint(payload: EnrichEndpointRequest) -> Dict[str, Any]:
+    """Generate human-reviewable summary, description, and tag suggestions without altering AST facts."""
+    service = get_enricher_service()
+    proposal = await service.enrich_endpoint_docs(payload.model_dump())
+    return proposal.model_dump()
+
+
+@api_router.post(
+    "/ai/explain-schema",
+    summary="Explain a Schema Field or Parameter with AI",
+    response_model=Dict[str, Any],
+)
+async def ai_explain_schema_field(payload: ExplainSchemaFieldRequest) -> Dict[str, Any]:
+    """Generate a plain-language explanation and example value for a field."""
+    service = get_enricher_service()
+    explanation = await service.explain_schema_field(payload.model_dump())
+    return explanation.model_dump()
+
+
+@api_router.post(
+    "/ai/summarize-diff",
+    summary="Summarize OpenAPI Spec Changes & Generate Mobile Review Cards",
+    response_model=Dict[str, Any],
+)
+async def ai_summarize_diff(payload: SummarizeDiffRequest) -> Dict[str, Any]:
+    """Generate an executive diff summary plus mobile-ready cards array with payload size caps."""
+    service = get_enricher_service()
+    summary = await service.summarize_diff(payload.model_dump())
+    return summary.model_dump()
 
