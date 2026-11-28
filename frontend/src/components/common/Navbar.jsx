@@ -10,32 +10,50 @@ export default function Navbar({
   onSelectScreen,
   endpointCount = 0,
   hasSpec = false,
+  backendStatus: externalBackendStatus,
+  onToggleLocalMode,
   onReset,
 }) {
-  const [backendStatus, setBackendStatus] = useState({
+  const [internalStatus, setInternalStatus] = useState({
     checked: false,
     online: false,
     waking: false,
+    hasConnectedOnce: false,
+    manualLocalMode: false,
   });
 
   useEffect(() => {
+    if (externalBackendStatus !== undefined) return undefined;
     let mounted = true;
     checkBackendHealth({
       retryOnColdStart: true,
       onWaking: () => {
         if (mounted) {
-          setBackendStatus({ checked: false, online: false, waking: true });
+          setInternalStatus((prev) => ({
+            ...prev,
+            checked: false,
+            online: false,
+            waking: true,
+          }));
         }
       },
     }).then((res) => {
       if (mounted) {
-        setBackendStatus({ checked: true, online: res.ok, waking: false });
+        setInternalStatus((prev) => ({
+          ...prev,
+          checked: true,
+          online: res.ok,
+          waking: false,
+          hasConnectedOnce: prev.hasConnectedOnce || res.ok,
+        }));
       }
     });
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [externalBackendStatus]);
+
+  const backendStatus = externalBackendStatus ?? internalStatus;
 
   const navItems = [
     {
@@ -120,20 +138,38 @@ export default function Navbar({
             </span>
           )}
           {backendStatus.checked && (
-            <span
-              className={`badge ${
-                backendStatus.online
-                  ? "bg-success-subtle text-success border border-success-subtle"
-                  : "bg-warning-subtle text-warning border border-warning-subtle"
-              } small py-1`}
-              title={
-                backendStatus.online
-                  ? "Connected to SpecCraft Cloud API"
-                  : "Cloud API unreachable. Running in browser local mode."
-              }
-            >
-              {backendStatus.online ? "● Cloud API Connected" : "○ Local Mode"}
-            </span>
+            <div className="d-inline-flex align-items-center gap-1">
+              <span
+                className={`badge ${
+                  backendStatus.online
+                    ? "bg-success-subtle text-success border border-success-subtle"
+                    : "bg-warning-subtle text-warning border border-warning-subtle"
+                } small py-1`}
+                title={
+                  backendStatus.online
+                    ? "Connected to SpecCraft Cloud API"
+                    : "Running in browser local mode."
+                }
+              >
+                {backendStatus.online ? "● Cloud API Connected" : "○ Local Mode"}
+              </span>
+
+              {backendStatus.hasConnectedOnce && onToggleLocalMode && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-light py-0 px-2 small"
+                  style={{ fontSize: "0.75rem", lineHeight: "1.6" }}
+                  onClick={onToggleLocalMode}
+                  title={
+                    backendStatus.manualLocalMode
+                      ? "Switch back to the connected SpecCraft Cloud API"
+                      : "Try client-side Local Mode without Cloud API calls"
+                  }
+                >
+                  {backendStatus.manualLocalMode ? "Use Cloud API" : "Use Local Mode"}
+                </button>
+              )}
+            </div>
           )}
 
           {onReset && (

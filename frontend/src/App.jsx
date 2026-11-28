@@ -1,14 +1,16 @@
-import React, { useState } from "react";
-import { Toaster } from "sonner";
+import React, { useEffect, useState } from "react";
+import { Toaster, toast } from "sonner";
 import Navbar from "./components/common/Navbar.jsx";
 import AstAnalysisPage from "./pages/AstAnalysisPage.jsx";
 import CodebaseImportPage from "./pages/CodebaseImportPage.jsx";
 import ExportCenterPage from "./pages/ExportCenterPage.jsx";
 import SpecificationDiffPage from "./pages/SpecificationDiffPage.jsx";
 import SpecificationEditorPage from "./pages/SpecificationEditorPage.jsx";
-import { deleteOverlayEntry, saveOverlayEntry } from "./services/apiClient.js";
+import { checkBackendHealth, deleteOverlayEntry, saveOverlayEntry } from "./services/apiClient.js";
 import { STORAGE_KEY, loadState, resetState, saveState } from "./utils/localStorage.js";
 import { updateEndpointMetadata } from "./utils/routeHelpers.js";
+
+const WAKE_BUDGET_SECONDS = 50;
 
 export default function App() {
   const [state, setState] = useState(() => loadState());
@@ -19,6 +21,87 @@ export default function App() {
     diagnostics: [],
     orphanedOverlayKeys: [],
   });
+  const [backendStatus, setBackendStatus] = useState({
+    checked: false,
+    online: false,
+    waking: false,
+    hasConnectedOnce: false,
+    manualLocalMode: false,
+  });
+  const [wakeElapsedSeconds, setWakeElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let mounted = true;
+    let wakeInterval = null;
+
+    checkBackendHealth({
+      retryOnColdStart: true,
+      maxWaitMs: WAKE_BUDGET_SECONDS * 1000,
+      signal: controller.signal,
+      onWaking: () => {
+        if (!mounted) return;
+        setWakeElapsedSeconds(0);
+        setBackendStatus((prev) => ({
+          ...prev,
+          checked: false,
+          online: false,
+          waking: true,
+        }));
+        const startedAt = Date.now();
+        wakeInterval = setInterval(() => {
+          if (mounted) {
+            setWakeElapsedSeconds(
+              Math.min(WAKE_BUDGET_SECONDS, Math.floor((Date.now() - startedAt) / 1000))
+            );
+          }
+        }, 1000);
+      },
+    }).then((res) => {
+      if (wakeInterval) clearInterval(wakeInterval);
+      if (!mounted || res.aborted) return;
+      setBackendStatus((prev) => ({
+        ...prev,
+        checked: true,
+        online: res.ok,
+        waking: false,
+        hasConnectedOnce: prev.hasConnectedOnce || res.ok,
+      }));
+      if (res.ok && res.wakingAttempted) {
+        toast.success("Cloud API connected and ready.");
+      } else if (!res.ok && res.wakingAttempted) {
+        toast.warning("Cloud API timed out after 50s. Switched to Local Mode.");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      if (wakeInterval) clearInterval(wakeInterval);
+      controller.abort();
+    };
+  }, []);
+
+  function handleToggleManualLocalMode() {
+    setBackendStatus((prev) => {
+      if (!prev.hasConnectedOnce) return prev;
+      const nextManual = !prev.manualLocalMode;
+      toast.info(nextManual ? "Switched to Local Mode." : "Switched back to Cloud API.");
+      return { ...prev, manualLocalMode: nextManual };
+    });
+  }
+
+  function handleBackendConfirmedOnline() {
+    setBackendStatus((prev) => ({
+      ...prev,
+      checked: true,
+      online: true,
+      waking: false,
+      hasConnectedOnce: true,
+      manualLocalMode: false,
+    }));
+  }
+
+  const effectiveBackendOnline = backendStatus.manualLocalMode ? false : backendStatus.online;
 
   function handleParseSuccess({
     endpoints = [],
@@ -93,6 +176,8 @@ export default function App() {
         onSelectScreen={setActiveScreen}
         endpointCount={(state.endpoints || []).length}
         hasSpec={Boolean(state.specs?.["parsed-preview"])}
+        backendStatus={{ ...backendStatus, online: effectiveBackendOnline }}
+        onToggleLocalMode={handleToggleManualLocalMode}
         onReset={handleReset}
       />
 
@@ -102,6 +187,10 @@ export default function App() {
           <div>
             <CodebaseImportPage
               endpoints={state.endpoints}
+              backendStatus={{ ...backendStatus, online: effectiveBackendOnline }}
+              wakeElapsedSeconds={wakeElapsedSeconds}
+              wakeBudgetSeconds={WAKE_BUDGET_SECONDS}
+              onBackendConfirmedOnline={handleBackendConfirmedOnline}
               onParseSuccess={handleParseSuccess}
             />
 

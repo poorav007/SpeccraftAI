@@ -29,7 +29,7 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.28;
 
 export default function App() {
-  const [lanIp, setLanIp] = useState("192.168.1.10:8000");
+  const [lanIp, setLanIp] = useState("https://speccraftai.onrender.com");
   const [prTarget, setPrTarget] = useState("poorav007/SpeccraftAI#1");
   const [showSettings, setShowSettings] = useState(false);
   const [cardsPayload, setCardsPayload] = useState(sampleCardsData);
@@ -195,18 +195,18 @@ export default function App() {
             style={styles.settingsBtn}
             onPress={() => setShowSettings((v) => !v)}
           >
-            <Text style={styles.settingsBtnText}>{showSettings ? "Hide LAN" : "LAN IP"}</Text>
+            <Text style={styles.settingsBtnText}>{showSettings ? "Hide Settings" : "Backend / PR"}</Text>
           </TouchableOpacity>
         </View>
 
         {showSettings && (
           <View style={styles.settingsBox}>
-            <Text style={styles.label}>Laptop Backend LAN IP (uvicorn --host 0.0.0.0 --port 8000)</Text>
+            <Text style={styles.label}>SpecCraft Backend URL (Cloud Render or Laptop LAN IP)</Text>
             <TextInput
               style={styles.input}
               value={lanIp}
               onChangeText={setLanIp}
-              placeholder="192.168.1.42:8000"
+              placeholder="https://speccraftai.onrender.com or 192.168.1.42:8000"
               autoCapitalize="none"
               autoCorrect={false}
             />

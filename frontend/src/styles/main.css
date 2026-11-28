@@ -158,8 +158,33 @@ html {
   }
 }
 
+/* Cold-start loading skeleton shimmer */
+@keyframes speccraft-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-block {
+  border-radius: 0.5rem;
+  background: linear-gradient(90deg, #e9ecef 25%, #f8f9fa 50%, #e9ecef 75%);
+  background-size: 200% 100%;
+  animation: speccraft-shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-pill {
+  border-radius: 999px;
+}
+
 /* Accessibility: Reduced Motion & Reduced Transparency */
 @media (prefers-reduced-motion: reduce) {
+  .skeleton-block {
+    animation: none;
+    background: #e9ecef;
+  }
   .btn:not(:disabled) {
     transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }

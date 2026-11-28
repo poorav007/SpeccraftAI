@@ -20,7 +20,7 @@ export function normalizeLanBaseUrl(rawInput) {
   const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
   try {
     const parsed = new URL(withScheme);
-    if (!parsed.port) {
+    if (!parsed.port && parsed.protocol === "http:") {
       parsed.port = "8000";
     }
     return parsed.origin;
@@ -62,7 +62,7 @@ export function summarizeDecisions(decisionsMap) {
 /**
  * Fetch diff cards directly from the laptop backend `/api/ai/summarize-diff` over LAN.
  */
-export async function fetchDiffCardsFromLan(lanInput, diffPayload, timeoutMs = 8000) {
+export async function fetchDiffCardsFromLan(lanInput, diffPayload, timeoutMs = 25000) {
   const baseUrl = normalizeLanBaseUrl(lanInput);
   if (!baseUrl) {
     return { ok: false, error: "Invalid LAN IP or URL (example: 192.168.1.42:8000)." };
@@ -113,7 +113,7 @@ export function parsePrTarget(rawInput) {
  */
 export async function postDecisionsToGithubPr(
   lanInput,
-  { owner, repo, prNumber, decisions, token = null, timeoutMs = 10000 }
+  { owner, repo, prNumber, decisions, token = null, timeoutMs = 25000 }
 ) {
   const baseUrl = normalizeLanBaseUrl(lanInput);
   if (!baseUrl) {

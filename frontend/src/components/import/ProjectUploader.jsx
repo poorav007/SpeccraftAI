@@ -35,7 +35,12 @@ def get_item(item_id: int):
     return {"id": item_id, "name": "Sample", "price": 10.0}
 `;
 
-export default function ProjectUploader({ initialEndpoints = [], onParseSuccess }) {
+export default function ProjectUploader({
+  initialEndpoints = [],
+  backendOnline: controlledBackendOnline,
+  onBackendConfirmedOnline,
+  onParseSuccess,
+}) {
   const [mode, setMode] = useState("github"); // 'github', 'file', or 'code'
   const [githubUrl, setGithubUrl] = useState("");
   const [githubRef, setGithubRef] = useState("");
@@ -46,23 +51,27 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
   const [diagnostics, setDiagnostics] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState(null);
-  const [backendOnline, setBackendOnline] = useState(null); // true, false, 'waking', or null
+  const [localBackendOnline, setLocalBackendOnline] = useState(null); // true, false, 'waking', or null
 
-  // Probe backend health on mount with cold-start wake handling
+  const backendOnline =
+    controlledBackendOnline !== undefined ? controlledBackendOnline : localBackendOnline;
+
+  // Probe backend health on mount only when rendered standalone without App parent state
   useEffect(() => {
+    if (controlledBackendOnline !== undefined) return undefined;
     let mounted = true;
     async function probeBackend() {
       const health = await checkBackendHealth({
         retryOnColdStart: true,
         onWaking: () => {
           if (mounted) {
-            setBackendOnline("waking");
+            setLocalBackendOnline("waking");
             toast.info("Waking up cloud backend (free tier cold start)...");
           }
         },
       });
       if (mounted) {
-        setBackendOnline(health.ok);
+        setLocalBackendOnline(health.ok);
         if (health.ok && health.wakingAttempted) {
           toast.success("Cloud API connected and ready.");
         }
@@ -72,7 +81,7 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [controlledBackendOnline]);
 
   function handleFileSelected(event) {
     const file = event.target.files?.[0];
@@ -113,7 +122,10 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
           throw new Error(res.error);
         }
         extractedData = res.result;
-        setBackendOnline(true);
+        if (controlledBackendOnline === undefined) {
+          setLocalBackendOnline(true);
+        }
+        onBackendConfirmedOnline?.();
       }
 
       if (extractedData || backendOnline === true) {
