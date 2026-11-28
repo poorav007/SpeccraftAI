@@ -19,6 +19,8 @@ import {
   STORAGE_KEYS,
   fetchDiffCardsFromLan,
   normalizeLanBaseUrl,
+  parsePrTarget,
+  postDecisionsToGithubPr,
   recordSwipeDecision,
   summarizeDecisions,
 } from "./src/cardUtils";
@@ -27,7 +29,8 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.28;
 
 export default function App() {
-  const [lanIp, setLanIp] = useState("192.168.1.10:8000");
+  const [lanIp, setLanIp] = useState("https://speccraftai.onrender.com");
+  const [prTarget, setPrTarget] = useState("poorav007/SpeccraftAI#1");
   const [showSettings, setShowSettings] = useState(false);
   const [cardsPayload, setCardsPayload] = useState(sampleCardsData);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -153,6 +156,26 @@ export default function App() {
     setStatusMsg("Cleared review decisions.");
   }
 
+  async function handlePostToGithubPr() {
+    const parsed = parsePrTarget(prTarget);
+    if (!parsed) {
+      setStatusMsg("Enter PR target as owner/repo#number (e.g. poorav007/SpeccraftAI#12)");
+      return;
+    }
+    setStatusMsg(`Posting review to ${parsed.owner}/${parsed.repo}#${parsed.prNumber}...`);
+    const res = await postDecisionsToGithubPr(lanIp, {
+      ...parsed,
+      decisions,
+    });
+    if (res.ok && res.data?.posted) {
+      setStatusMsg(`Posted PR comment: ${res.data.comment_url}`);
+    } else if (res.ok) {
+      setStatusMsg(`Generated PR review preview (${res.data?.reason || "token unset"}).`);
+    } else {
+      setStatusMsg(res.error);
+    }
+  }
+
   const cardRotate = pan.x.interpolate({
     inputRange: [-SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 2],
     outputRange: ["-7deg", "0deg", "7deg"],
@@ -172,18 +195,27 @@ export default function App() {
             style={styles.settingsBtn}
             onPress={() => setShowSettings((v) => !v)}
           >
-            <Text style={styles.settingsBtnText}>{showSettings ? "Hide LAN" : "LAN IP"}</Text>
+            <Text style={styles.settingsBtnText}>{showSettings ? "Hide Settings" : "Backend / PR"}</Text>
           </TouchableOpacity>
         </View>
 
         {showSettings && (
           <View style={styles.settingsBox}>
-            <Text style={styles.label}>Laptop Backend LAN IP (uvicorn --host 0.0.0.0 --port 8000)</Text>
+            <Text style={styles.label}>SpecCraft Backend URL (Cloud Render or Laptop LAN IP)</Text>
             <TextInput
               style={styles.input}
               value={lanIp}
               onChangeText={setLanIp}
-              placeholder="192.168.1.42:8000"
+              placeholder="https://speccraftai.onrender.com or 192.168.1.42:8000"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={styles.label}>GitHub PR Target (owner/repo#number)</Text>
+            <TextInput
+              style={styles.input}
+              value={prTarget}
+              onChangeText={setPrTarget}
+              placeholder="poorav007/SpeccraftAI#12"
               autoCapitalize="none"
               autoCorrect={false}
             />
@@ -282,6 +314,9 @@ export default function App() {
                 </Text>
               </View>
             ))}
+            <TouchableOpacity style={styles.primaryBtn} onPress={handlePostToGithubPr}>
+              <Text style={styles.btnTextWhite}>Post Decisions to GitHub PR</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.resetBtn} onPress={handleResetSession}>
               <Text style={styles.btnTextWhite}>Restart Review</Text>
             </TouchableOpacity>

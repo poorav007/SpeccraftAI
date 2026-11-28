@@ -2,15 +2,22 @@ import { describe, expect, it } from "vitest";
 import sampleCards from "../../mobile/src/sampleCards.json";
 import {
   normalizeLanBaseUrl,
+  parsePrTarget,
   recordSwipeDecision,
   summarizeDecisions,
 } from "../../mobile/src/cardUtils.js";
 
 describe("Expo Go mobile swipe reviewer utilities", () => {
-  it("normalizes laptop LAN IP inputs with default port 8000", () => {
+  it("normalizes laptop LAN IPs with :8000 while keeping HTTPS cloud URLs intact", () => {
     expect(normalizeLanBaseUrl("192.168.1.42")).toBe("http://192.168.1.42:8000");
     expect(normalizeLanBaseUrl("192.168.1.42:9000/")).toBe("http://192.168.1.42:9000");
     expect(normalizeLanBaseUrl("http://10.0.0.5:8000")).toBe("http://10.0.0.5:8000");
+    expect(normalizeLanBaseUrl("https://speccraftai.onrender.com")).toBe(
+      "https://speccraftai.onrender.com"
+    );
+    expect(normalizeLanBaseUrl("https://speccraftai.onrender.com/")).toBe(
+      "https://speccraftai.onrender.com"
+    );
     expect(normalizeLanBaseUrl("")).toBe("");
   });
 
@@ -34,6 +41,15 @@ describe("Expo Go mobile swipe reviewer utilities", () => {
       expect(card).toHaveProperty("before");
       expect(card).toHaveProperty("after");
     }
+  });
+
+  it("parses GitHub PR targets cleanly for mobile PR comment loop", () => {
+    expect(parsePrTarget("poorav007/SpeccraftAI#42")).toEqual({
+      owner: "poorav007",
+      repo: "SpeccraftAI",
+      prNumber: 42,
+    });
+    expect(parsePrTarget("invalid-string")).toBeNull();
   });
 });
 

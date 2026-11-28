@@ -8,8 +8,12 @@ from __future__ import annotations
 
 import io
 import json
-from typing import Any, Dict, List, Literal, Optional, Union
+import os
+import re
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from speccraft.ai import get_enricher_service
@@ -23,7 +27,7 @@ from speccraft.exporters import (
 from speccraft.models import ExtractionResult
 from speccraft.openapi_generator import OpenAPIGenerator
 from speccraft.overlay import OverlayEntry, get_overlay_store, make_overlay_key
-from speccraft.reader import ArchiveSecurityError
+from speccraft.reader import MAX_ARCHIVE_SIZE_BYTES, ArchiveSecurityError
 from speccraft.route_extractor import RouteExtractor
 from speccraft.schema_validator import OpenAPISchemaValidator, ValidationReport
 from speccraft.utils.path_safety import FileTooLargeError, PathSecurityError
@@ -35,6 +39,80 @@ class CodeParseRequest(BaseModel):
     """Payload for direct code snippet extraction."""
     code: str = Field(..., description="Raw Python/FastAPI route code")
     filename: str = Field(default="main.py", description="Virtual file name for AST parsing")
+
+
+class GitHubParseRequest(BaseModel):
+    """Payload for fetching and parsing a public GitHub repository."""
+    repo_url: str = Field(..., description="Public GitHub repo URL, e.g. https://github.com/owner/repo")
+    ref: Optional[str] = Field(default=None, description="Optional branch, tag, or commit ref")
+
+
+class GitHubPRReviewRequest(BaseModel):
+    """Payload for posting Mobile Approve/Block decisions back to a GitHub Pull Request."""
+    owner: str = Field(..., min_length=1)
+    repo: str = Field(..., min_length=1)
+    pr_number: int = Field(..., ge=1)
+    decisions: List[Dict[str, Any]] = Field(default_factory=list)
+    summary_note: Optional[str] = Field(default=None)
+    github_token: Optional[str] = Field(default=None)
+
+
+_GITHUB_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def parse_github_repo_url(repo_url: str, explicit_ref: Optional[str] = None) -> Tuple[str, str, Optional[str]]:
+    """Validate and extract (owner, repo, ref) from a GitHub HTTPS URL (prevents SSRF)."""
+    parsed = urlparse(str(repo_url or "").strip())
+    if parsed.scheme != "https" or (parsed.hostname or "").lower() not in {"github.com", "www.github.com"}:
+        raise ValueError("URL must be a public https://github.com/<owner>/<repo> URL.")
+
+    parts = [p for p in parsed.path.strip("/").split("/") if p]
+    if len(parts) < 2:
+        raise ValueError("URL must include both owner and repository name.")
+
+    owner = parts[0]
+    repo = parts[1][:-4] if parts[1].endswith(".git") else parts[1]
+    if not _GITHUB_SEGMENT_RE.match(owner) or not _GITHUB_SEGMENT_RE.match(repo):
+        raise ValueError("Invalid GitHub owner or repository characters.")
+
+    ref = (explicit_ref or "").strip() or None
+    if ref is None and len(parts) >= 4 and parts[2] == "tree":
+        ref = "/".join(parts[3:])
+    return owner, repo, ref
+
+
+def format_pr_review_markdown(
+    decisions: List[Dict[str, Any]],
+    summary_note: Optional[str] = None,
+) -> str:
+    """Format mobile swipe Approve/Block decisions into a clean GitHub PR comment."""
+    approved = sum(1 for d in decisions if str(d.get("decision")).lower() == "approved")
+    blocked = sum(1 for d in decisions if str(d.get("decision")).lower() == "blocked")
+    status_line = "🚨 **API Review Blocked**" if blocked > 0 else "✅ **API Changes Approved**"
+
+    lines = [
+        f"## SpecCraft AI — Mobile Spec Review",
+        "",
+        f"{status_line} · **Approved**: `{approved}` | **Blocked**: `{blocked}`",
+        "",
+    ]
+    if summary_note:
+        lines.extend([summary_note, ""])
+    if decisions:
+        lines.extend(
+            [
+                "| Decision | Endpoint | Severity | Impact |",
+                "| :--- | :--- | :--- | :--- |",
+            ]
+        )
+        for item in decisions:
+            dec = "🚨 BLOCKED" if str(item.get("decision")).lower() == "blocked" else "✅ APPROVED"
+            ep = str(item.get("endpoint") or "/")
+            sev = str(item.get("severity") or "non_breaking").upper()
+            imp = str(item.get("one_line_impact") or "").replace("|", "\\|")
+            lines.append(f"| {dec} | `{ep}` | `{sev}` | {imp} |")
+        lines.append("")
+    return "\n".join(lines)
 
 
 class GenerateSpecRequest(BaseModel):
@@ -214,6 +292,107 @@ async def parse_code_json(payload: CodeParseRequest) -> Dict[str, Any]:
     result = extractor.extract_from_code_string(payload.code, filename=payload.filename)
     result = get_overlay_store().apply_to_extraction_result(result)
     return result.model_dump()
+
+
+@api_router.post(
+    "/parse/github",
+    summary="Fetch & Parse Public GitHub Repository",
+    response_model=Dict[str, Any],
+)
+async def parse_github_repo(payload: GitHubParseRequest) -> Dict[str, Any]:
+    """Safely download a public GitHub repo archive (<=10MB) and run static analysis."""
+    try:
+        owner, repo, ref = parse_github_repo_url(payload.repo_url, payload.ref)
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+
+    zip_url = f"https://api.github.com/repos/{owner}/{repo}/zipball"
+    if ref:
+        zip_url = f"{zip_url}/{ref}"
+
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "SpecCraft-AI"}
+    token = os.getenv("GITHUB_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            resp = await client.get(zip_url, headers=headers)
+    except httpx.HTTPError as err:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to download GitHub repository: {err}",
+        )
+
+    if resp.status_code == 404:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"GitHub repository '{owner}/{repo}' (or branch '{ref or 'default'}') was not found or is private.",
+        )
+    if resp.status_code >= 400:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"GitHub API returned HTTP {resp.status_code}.",
+        )
+    if len(resp.content) > MAX_ARCHIVE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Repository archive exceeds 10 MB limit ({len(resp.content)} bytes).",
+        )
+
+    result = RouteExtractor().extract_from_zip(resp.content)
+    for d in result.diagnostics:
+        if d.code.value == "SC-E002":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=d.message)
+
+    result = get_overlay_store().apply_to_extraction_result(result)
+    return result.model_dump()
+
+
+@api_router.post(
+    "/github/pr-review",
+    summary="Post Mobile Approve/Block Decisions to a GitHub Pull Request",
+    response_model=Dict[str, Any],
+)
+async def post_github_pr_review(payload: GitHubPRReviewRequest) -> Dict[str, Any]:
+    """Post formatted Markdown Approve/Block summary back to a GitHub PR comment thread."""
+    if not _GITHUB_SEGMENT_RE.match(payload.owner) or not _GITHUB_SEGMENT_RE.match(payload.repo):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid owner or repo name.")
+
+    comment_md = format_pr_review_markdown(payload.decisions, payload.summary_note)
+    token = (payload.github_token or os.getenv("GITHUB_TOKEN") or "").strip()
+    if not token:
+        return {
+            "posted": False,
+            "reason": "Missing GITHUB_TOKEN (preview generated safely without posting).",
+            "comment_markdown": comment_md,
+        }
+
+    url = f"https://api.github.com/repos/{payload.owner}/{payload.repo}/issues/{payload.pr_number}/comments"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "SpecCraft-AI",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            resp = await client.post(url, headers=headers, json={"body": comment_md})
+        if resp.status_code >= 400:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"GitHub PR comment failed (HTTP {resp.status_code}): {resp.text[:200]}",
+            )
+        data = resp.json()
+        return {
+            "posted": True,
+            "comment_url": data.get("html_url"),
+            "comment_markdown": comment_md,
+        }
+    except httpx.HTTPError as err:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to contact GitHub API: {err}",
+        )
 
 
 @api_router.post(

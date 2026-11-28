@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   checkBackendHealth,
   parseCodeSnippet,
+  parseGithubRepo,
   uploadAndParseArchive,
 } from "../../services/apiClient.js";
 import { parseRouteCode } from "../../utils/parser.js";
@@ -33,8 +35,15 @@ def get_item(item_id: int):
     return {"id": item_id, "name": "Sample", "price": 10.0}
 `;
 
-export default function ProjectUploader({ initialEndpoints = [], onParseSuccess }) {
-  const [mode, setMode] = useState("file"); // 'file' or 'code'
+export default function ProjectUploader({
+  initialEndpoints = [],
+  backendOnline: controlledBackendOnline,
+  onBackendConfirmedOnline,
+  onParseSuccess,
+}) {
+  const [mode, setMode] = useState("github"); // 'github', 'file', or 'code'
+  const [githubUrl, setGithubUrl] = useState("");
+  const [githubRef, setGithubRef] = useState("");
   const [code, setCode] = useState(SAMPLE_FASTAPI_CODE);
   const [selectedFile, setSelectedFile] = useState(null);
   const [endpoints, setEndpoints] = useState(initialEndpoints);
@@ -42,16 +51,37 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
   const [diagnostics, setDiagnostics] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState(null);
-  const [backendOnline, setBackendOnline] = useState(null); // true, false, or null (checking)
+  const [localBackendOnline, setLocalBackendOnline] = useState(null); // true, false, 'waking', or null
 
-  // Probe backend health on mount
+  const backendOnline =
+    controlledBackendOnline !== undefined ? controlledBackendOnline : localBackendOnline;
+
+  // Probe backend health on mount only when rendered standalone without App parent state
   useEffect(() => {
+    if (controlledBackendOnline !== undefined) return undefined;
+    let mounted = true;
     async function probeBackend() {
-      const health = await checkBackendHealth();
-      setBackendOnline(health.ok);
+      const health = await checkBackendHealth({
+        retryOnColdStart: true,
+        onWaking: () => {
+          if (mounted) {
+            setLocalBackendOnline("waking");
+            toast.info("Waking up cloud backend (free tier cold start)...");
+          }
+        },
+      });
+      if (mounted) {
+        setLocalBackendOnline(health.ok);
+        if (health.ok && health.wakingAttempted) {
+          toast.success("Cloud API connected and ready.");
+        }
+      }
     }
     probeBackend();
-  }, []);
+    return () => {
+      mounted = false;
+    };
+  }, [controlledBackendOnline]);
 
   function handleFileSelected(event) {
     const file = event.target.files?.[0];
@@ -82,22 +112,39 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
     try {
       let extractedData = null;
 
-      // 1. If backend is online, call FastAPI AST bridge
-      if (backendOnline) {
-        if (mode === "file" && selectedFile) {
-          const res = await uploadAndParseArchive(selectedFile);
-          if (!res.ok) {
-            throw new Error(res.error);
+      // 1. If backend is online (or user submitted a GitHub URL requiring backend), call FastAPI bridge
+      if (mode === "github") {
+        if (!githubUrl.trim()) {
+          throw new Error("Please enter a public GitHub repository URL.");
+        }
+        const res = await parseGithubRepo(githubUrl.trim(), githubRef.trim() || null);
+        if (!res.ok) {
+          throw new Error(res.error);
+        }
+        extractedData = res.result;
+        if (controlledBackendOnline === undefined) {
+          setLocalBackendOnline(true);
+        }
+        onBackendConfirmedOnline?.();
+      }
+
+      if (extractedData || backendOnline === true) {
+        if (!extractedData) {
+          if (mode === "file" && selectedFile) {
+            const res = await uploadAndParseArchive(selectedFile);
+            if (!res.ok) {
+              throw new Error(res.error);
+            }
+            extractedData = res.result;
+          } else if (code.trim()) {
+            const res = await parseCodeSnippet(code, "snippet.py");
+            if (!res.ok) {
+              throw new Error(res.error);
+            }
+            extractedData = res.result;
+          } else {
+            throw new Error("Please select a file or enter code to extract.");
           }
-          extractedData = res.result;
-        } else if (code.trim()) {
-          const res = await parseCodeSnippet(code, "snippet.py");
-          if (!res.ok) {
-            throw new Error(res.error);
-          }
-          extractedData = res.result;
-        } else {
-          throw new Error("Please select a file or enter code to extract.");
         }
 
         // Set state from backend response
@@ -107,7 +154,7 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
           filesScanned: extractedData.files_scanned,
           totalLoc: extractedData.total_loc,
           durationMs: extractedData.parse_duration_ms,
-          engine: "Python 3 Static AST (speccraft)",
+          engine: "SpecCraft Multi-Framework Analyzer",
         });
 
         // Pass up for localStorage persistence
@@ -124,10 +171,9 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
           },
         });
 
-        setStatus({
-          type: "success",
-          message: `Successfully extracted ${extractedData.endpoints.length} route(s) across ${extractedData.files_scanned} file(s) in ${extractedData.parse_duration_ms.toFixed(1)} ms.`,
-        });
+        const okMsg = `Discovered ${extractedData.endpoints.length} endpoint(s) across ${extractedData.files_scanned} file(s) in ${extractedData.parse_duration_ms.toFixed(1)} ms.`;
+        setStatus({ type: "success", message: okMsg });
+        toast.success(okMsg);
       } else {
         // 2. Client-side fallback if backend is offline
         const localRes = parseRouteCode(code);
@@ -171,40 +217,56 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
 
   return (
     <div className="card shadow-sm border-0">
-      {/* Header with Backend Status Badge */}
+      {/* Header with Backend Status Badge & Outcome-Focused Copy */}
       <div className="card-header bg-body-tertiary d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
         <div>
-          <h2 className="h5 mb-0 fw-bold">Codebase Ingestion & AST Extraction</h2>
-          <small className="text-muted">Screen 1 · Static AST Route Discovery Engine</small>
+          <h2 className="h5 mb-0 fw-bold">Import API Project</h2>
+          <small className="text-muted">
+            Connect a GitHub repo or upload FastAPI / Flask / Express code → generate OpenAPI docs &amp; breaking-change checks in under 1 second
+          </small>
         </div>
         <div>
           {backendOnline === true && (
             <span className="badge text-bg-success d-inline-flex align-items-center gap-1.5 px-2.5 py-1.5 shadow-xs">
               <span className="spinner-grow spinner-grow-sm" style={{ width: "8px", height: "8px" }} />
-              FastAPI Bridge Online (v0.1.0)
+              Cloud API Connected
+            </span>
+          )}
+          {backendOnline === "waking" && (
+            <span className="badge text-bg-info d-inline-flex align-items-center gap-1.5 px-2.5 py-1.5 shadow-xs">
+              ⏳ Waking up backend...
             </span>
           )}
           {backendOnline === false && (
             <span className="badge text-bg-warning d-inline-flex align-items-center gap-1.5 px-2.5 py-1.5 shadow-xs">
-              API Offline · Local Fallback
+              Local Mode
             </span>
           )}
           {backendOnline === null && (
-            <span className="badge text-bg-secondary px-2.5 py-1.5">Checking API...</span>
+            <span className="badge text-bg-secondary px-2.5 py-1.5">Connecting...</span>
           )}
         </div>
       </div>
 
       <div className="card-body p-4">
         {/* Mode Selector Tabs */}
-        <ul className="nav nav-pills mb-3" role="tablist">
+        <ul className="nav nav-pills mb-3 flex-wrap gap-1" role="tablist">
+          <li className="nav-item" role="presentation">
+            <button
+              type="button"
+              className={`nav-link ${mode === "github" ? "active" : ""}`}
+              onClick={() => { setMode("github"); setStatus(null); }}
+            >
+              🔗 Paste GitHub Repo URL
+            </button>
+          </li>
           <li className="nav-item" role="presentation">
             <button
               type="button"
               className={`nav-link ${mode === "file" ? "active" : ""}`}
               onClick={() => { setMode("file"); setStatus(null); }}
             >
-              📦 Project Archive (.zip / .py)
+              📦 Project Archive (.zip / .py / .js)
             </button>
           </li>
           <li className="nav-item" role="presentation">
@@ -213,28 +275,65 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
               className={`nav-link ${mode === "code" ? "active" : ""}`}
               onClick={() => { setMode("code"); setStatus(null); }}
             >
-              📝 Direct Code Editor
+              📝 Code Snippet
             </button>
           </li>
         </ul>
 
         <form onSubmit={handleExtract} noValidate>
+          {/* GitHub Repo URL Mode */}
+          {mode === "github" && (
+            <div className="mb-3">
+              <div className="row g-2">
+                <div className="col-12 col-md-8">
+                  <label htmlFor="github-repo-input" className="form-label fw-semibold">
+                    Public GitHub Repository URL
+                  </label>
+                  <input
+                    id="github-repo-input"
+                    type="url"
+                    className="form-control"
+                    placeholder="https://github.com/owner/fastapi-service"
+                    value={githubUrl}
+                    onChange={(e) => setGithubUrl(e.target.value)}
+                  />
+                </div>
+                <div className="col-12 col-md-4">
+                  <label htmlFor="github-ref-input" className="form-label fw-semibold">
+                    Branch / Tag (Optional)
+                  </label>
+                  <input
+                    id="github-ref-input"
+                    type="text"
+                    className="form-control"
+                    placeholder="main"
+                    value={githubRef}
+                    onChange={(e) => setGithubRef(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="form-text small mt-1">
+                Analyzes FastAPI, Flask, and Express.js repositories without executing your code (up to 10 MB).
+              </div>
+            </div>
+          )}
+
           {/* File Upload Mode */}
           {mode === "file" && (
             <div className="mb-3">
               <label htmlFor="project-file-input" className="form-label fw-semibold">
-                Upload Project Archive (.zip) or Python File (.py)
+                Upload Project Archive (.zip) or API Route File (.py / .js / .ts)
               </label>
               <div className="border border-2 border-dashed rounded p-4 text-center bg-light">
                 <input
                   id="project-file-input"
                   type="file"
-                  accept=".zip,.py,.js"
+                  accept=".zip,.py,.js,.ts"
                   className="form-control mb-2"
                   onChange={handleFileSelected}
                 />
                 <div className="small text-muted">
-                  Supports full zip archives (with Zip-Slip traversal defense) or single route files. Max 10MB.
+                  Drop a project .zip or single route file (max 10 MB). Analyzed statically — your code is never executed.
                 </div>
                 {selectedFile && (
                   <div className="mt-2 fw-semibold text-primary">
@@ -349,7 +448,9 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
           <section className="mt-4" aria-label="Extracted API routes">
             <div className="d-flex justify-content-between align-items-center mb-2">
               <h3 className="h6 fw-bold mb-0">Discovered Routes ({endpoints.length})</h3>
-              <span className="badge bg-secondary font-monospace">Sorted Deterministically</span>
+              <span className="badge bg-success-subtle text-success border border-success-subtle">
+                Ready for OpenAPI Export
+              </span>
             </div>
             <ul className="list-group shadow-xs">
               {endpoints.map((ep, idx) => (

@@ -54,24 +54,112 @@ class PydanticSchemaExtractor:
     def __init__(self) -> None:
         self.schemas: Dict[str, Dict[str, Any]] = {}
         self.known_model_names: Set[str] = set()
+        self._class_bases: Dict[str, List[str]] = {}
+        self._pending_classes: Dict[str, ast.ClassDef] = {}
 
-    def extract_from_ast(self, tree: ast.AST) -> Dict[str, Dict[str, Any]]:
+    @staticmethod
+    def _collect_class_defs(tree: ast.AST) -> List[ast.ClassDef]:
+        """Collect ClassDef nodes by walking statement blocks without descending into expressions."""
+        classes: List[ast.ClassDef] = []
+        stack: List[ast.stmt] = list(getattr(tree, "body", []))
+        while stack:
+            stmt = stack.pop()
+            if isinstance(stmt, ast.ClassDef):
+                classes.append(stmt)
+                stack.extend(stmt.body)
+            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.With, ast.AsyncWith)):
+                stack.extend(stmt.body)
+            elif isinstance(stmt, ast.If):
+                stack.extend(stmt.body)
+                stack.extend(stmt.orelse)
+            elif isinstance(stmt, ast.Try) or (hasattr(ast, "TryStar") and isinstance(stmt, ast.TryStar)):
+                stack.extend(stmt.body)
+                stack.extend(stmt.orelse)
+                stack.extend(stmt.finalbody)
+                for handler in stmt.handlers:
+                    stack.extend(handler.body)
+        return classes
+
+    def extract_from_ast(self, tree: ast.AST, finalize: bool = True) -> Dict[str, Dict[str, Any]]:
         """Scan AST tree for ClassDefs inheriting from BaseModel, Schema, or Enum."""
-        class_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+        class_nodes = self._collect_class_defs(tree)
 
-        # Collect model and enum class names first
         for node in class_nodes:
-            if self._is_pydantic_model(node) or self._is_enum(node):
+            self._pending_classes[node.name] = node
+            self._class_bases[node.name] = [
+                base.id if isinstance(base, ast.Name) else base.attr
+                for base in node.bases
+                if isinstance(base, (ast.Name, ast.Attribute))
+            ]
+            # Defer parsing until finalize_schemas when batching, or parse eagerly below
+            if not finalize and (self._is_pydantic_model(node) or self._is_enum(node)):
                 self.known_model_names.add(node.name)
 
-        # Extract schemas
-        for node in class_nodes:
-            if self._is_pydantic_model(node):
-                self.schemas[node.name] = self._parse_class_def(node)
-            elif self._is_enum(node):
-                self.schemas[node.name] = self._parse_enum_class(node)
+        if finalize:
+            self.finalize_schemas()
 
         return self.schemas
+
+    def finalize_schemas(self) -> Dict[str, Dict[str, Any]]:
+        """Resolve multi-file model inheritance and materialize all Pydantic/Enum schemas once."""
+        changed = True
+        while changed:
+            changed = False
+            for cls_name, node in self._pending_classes.items():
+                if cls_name not in self.known_model_names and (
+                    self._is_pydantic_model(node) or self._is_enum(node)
+                ):
+                    self.known_model_names.add(cls_name)
+                    changed = True
+
+        for cls_name, node in self._pending_classes.items():
+            if cls_name in self.known_model_names and cls_name not in self.schemas:
+                self.schemas[cls_name] = (
+                    self._parse_enum_class(node)
+                    if self._is_enum(node)
+                    else self._parse_class_def(node)
+                )
+
+        self.finalize_inheritance()
+        return self.schemas
+
+    def finalize_inheritance(self) -> None:
+        """Merge inherited parent Pydantic schema properties & required fields across files."""
+        resolved: Dict[str, Dict[str, Any]] = {}
+
+        def resolve_one(name: str, seen: Set[str]) -> Dict[str, Any]:
+            if name in resolved:
+                return resolved[name]
+            base_schema = dict(self.schemas.get(name) or {})
+            if name in seen or base_schema.get("type") != "object":
+                return base_schema
+            seen_next = seen | {name}
+
+            merged_props: Dict[str, Any] = {}
+            merged_req: List[str] = []
+            for parent_name in self._class_bases.get(name, []):
+                if parent_name in self.schemas and parent_name not in seen_next:
+                    parent_resolved = resolve_one(parent_name, seen_next)
+                    for k, v in (parent_resolved.get("properties") or {}).items():
+                        merged_props[k] = v
+                    for req_key in parent_resolved.get("required") or []:
+                        if req_key not in merged_req:
+                            merged_req.append(req_key)
+
+            for k, v in (base_schema.get("properties") or {}).items():
+                merged_props[k] = v
+            for req_key in base_schema.get("required") or []:
+                if req_key not in merged_req:
+                    merged_req.append(req_key)
+
+            base_schema["properties"] = merged_props
+            if merged_req:
+                base_schema["required"] = merged_req
+            resolved[name] = base_schema
+            return base_schema
+
+        for schema_name in list(self.schemas.keys()):
+            self.schemas[schema_name] = resolve_one(schema_name, set())
 
     def _is_enum(self, node: ast.ClassDef) -> bool:
         """Check if class inherits from Enum, str+Enum, or IntEnum."""

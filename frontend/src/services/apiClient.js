@@ -5,10 +5,49 @@
  * Includes timeout handling and graceful offline fallback detection.
  */
 
-export const API_BASE_URL =
-  import.meta.env?.VITE_API_BASE_URL || "http://localhost:8000/api";
+const PROD_RENDER_API_URL = "https://speccraftai.onrender.com/api";
+
+/**
+ * Normalize VITE_API_BASE_URL so hosts with or without https:// or /api suffix resolve cleanly.
+ * When unset in a deployed browser (non-localhost), automatically defaults to the Render backend.
+ */
+export function normalizeApiBaseUrl(
+  rawUrl,
+  runtimeHostname = typeof window !== "undefined" ? window.location?.hostname : ""
+) {
+  const raw = String(rawUrl || "").trim().replace(/\/+$/, "");
+  if (!raw) {
+    const host = String(runtimeHostname || "").toLowerCase();
+    const isLocal = !host || host === "localhost" || host === "127.0.0.1";
+    return isLocal ? "http://localhost:8000/api" : PROD_RENDER_API_URL;
+  }
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withScheme.endsWith("/api") ? withScheme : `${withScheme}/api`;
+}
+
+export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env?.VITE_API_BASE_URL);
 
 const DEFAULT_TIMEOUT_MS = 15000;
+
+function sleepWithAbort(ms, signal) {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    function onAbort() {
+      clearTimeout(timer);
+      resolve();
+    }
+    if (signal?.aborted) {
+      clearTimeout(timer);
+      resolve();
+      return;
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 /**
  * Helper to execute a fetch request with an AbortController timeout.
@@ -54,20 +93,78 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_M
 
 /**
  * Checks if the backend FastAPI service is running and healthy.
+ * Supports optional Render free-tier cold-start retry with waking callback.
  *
- * @returns {Promise<{ ok: boolean, data?: object, error?: string }>}
+ * @param {object} [options]
+ * @param {boolean} [options.retryOnColdStart=false]
+ * @param {Function} [options.onWaking]
+ * @returns {Promise<{ ok: boolean, data?: object, error?: string, wakingAttempted?: boolean }>}
  */
-export async function checkBackendHealth() {
+export async function checkBackendHealth({
+  retryOnColdStart = false,
+  onWaking,
+  signal,
+  maxWaitMs = 50000,
+  pollIntervalMs = 4000,
+  retryTimeoutMs = 15000,
+} = {}) {
+  const coldStartStatuses = new Set([502, 503, 504]);
+  let lastError = "Backend server unreachable.";
+
   try {
-    const res = await fetchWithTimeout(`${API_BASE_URL}/health`, { method: "GET" }, 2500);
-    if (!res.ok) {
-      return { ok: false, error: `Health check failed with status ${res.status}` };
+    const res = await fetchWithTimeout(`${API_BASE_URL}/health`, { method: "GET", signal }, 3500);
+    if (res.ok) {
+      const data = await res.json();
+      return { ok: true, data };
     }
-    const data = await res.json();
-    return { ok: true, data };
+    lastError = `Health check failed with status ${res.status}`;
+    if (!retryOnColdStart || !coldStartStatuses.has(res.status)) {
+      return { ok: false, error: lastError };
+    }
   } catch (err) {
-    return { ok: false, error: err.message || "Backend server unreachable." };
+    if (err.name === "AbortError" && signal?.aborted) {
+      return { ok: false, aborted: true, error: "Health check aborted." };
+    }
+    lastError = err.message || "Backend server unreachable.";
+    if (!retryOnColdStart) {
+      return { ok: false, error: lastError };
+    }
   }
+
+  onWaking?.();
+  const deadline = Date.now() + maxWaitMs;
+
+  while (!signal?.aborted) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+
+    try {
+      const wakeRes = await fetchWithTimeout(
+        `${API_BASE_URL}/health`,
+        { method: "GET", signal },
+        Math.min(retryTimeoutMs, Math.max(1000, remainingMs))
+      );
+      if (wakeRes.ok) {
+        return { ok: true, data: await wakeRes.json(), wakingAttempted: true };
+      }
+      lastError = `Health check failed with status ${wakeRes.status}`;
+    } catch (wakeErr) {
+      if (wakeErr.name === "AbortError" && signal?.aborted) {
+        return { ok: false, aborted: true, wakingAttempted: true, error: "Health check aborted." };
+      }
+      lastError = wakeErr.message || "Backend server unreachable.";
+    }
+
+    const waitRemaining = deadline - Date.now();
+    if (waitRemaining <= 0) break;
+    await sleepWithAbort(Math.min(pollIntervalMs, waitRemaining), signal);
+  }
+
+  return {
+    ok: false,
+    wakingAttempted: true,
+    error: lastError,
+  };
 }
 
 /**
@@ -109,7 +206,7 @@ export async function uploadAndParseArchive(file) {
     const res = await fetchWithTimeout(`${API_BASE_URL}/parse`, {
       method: "POST",
       body: formData,
-    });
+    }, 45000);
 
     const body = await res.json();
     if (!res.ok) {
@@ -415,6 +512,26 @@ export async function exportHandoffHtml(
     return { ok: true, html };
   } catch (err) {
     return { ok: false, error: err.message || "Failed to generate handoff HTML." };
+  }
+}
+
+/**
+ * Fetches & parses a public GitHub repository URL via backend /api/parse/github.
+ */
+export async function parseGithubRepo(repoUrl, ref = null) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/parse/github`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo_url: repoUrl, ref: ref || null }),
+    }, 45000);
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `GitHub import failed (${res.status})` };
+    }
+    return { ok: true, result: body };
+  } catch (err) {
+    return { ok: false, error: err.message || "Failed to import GitHub repository." };
   }
 }
 

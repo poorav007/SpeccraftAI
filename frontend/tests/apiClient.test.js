@@ -3,7 +3,9 @@ import {
   checkBackendHealth,
   compareOpenApiSpecs,
   generateOpenApiSpec,
+  normalizeApiBaseUrl,
   parseCodeSnippet,
+  parseGithubRepo,
   uploadAndParseArchive,
   validateOpenApiSpec,
 } from "../src/services/apiClient.js";
@@ -135,6 +137,70 @@ describe("apiClient service suite", () => {
       expect.stringContaining("/diff"),
       expect.objectContaining({
         method: "POST",
+      })
+    );
+  });
+
+  it("normalizeApiBaseUrl handles hosts, /api suffix, and Render vs localhost fallback", () => {
+    expect(normalizeApiBaseUrl("", "localhost")).toBe("http://localhost:8000/api");
+    expect(normalizeApiBaseUrl("", "speccraftai-frontend.onrender.com")).toBe(
+      "https://speccraftai.onrender.com/api"
+    );
+    expect(normalizeApiBaseUrl("https://api.onrender.com")).toBe("https://api.onrender.com/api");
+    expect(normalizeApiBaseUrl("https://api.onrender.com/api/")).toBe("https://api.onrender.com/api");
+    expect(normalizeApiBaseUrl("my-backend.onrender.com")).toBe("https://my-backend.onrender.com/api");
+  });
+
+  it("checkBackendHealth triggers onWaking and succeeds across multi-poll cold-start recovery", async () => {
+    const onWaking = vi.fn();
+    fetch
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "healthy" }),
+      });
+
+    const res = await checkBackendHealth({
+      retryOnColdStart: true,
+      onWaking,
+      pollIntervalMs: 1,
+      maxWaitMs: 2000,
+    });
+    expect(onWaking).toHaveBeenCalledTimes(1);
+    expect(res.ok).toBe(true);
+    expect(res.wakingAttempted).toBe(true);
+  });
+
+  it("checkBackendHealth falls back cleanly when cold-start retry budget expires", async () => {
+    const onWaking = vi.fn();
+    fetch.mockResolvedValue({ ok: false, status: 503 });
+
+    const res = await checkBackendHealth({
+      retryOnColdStart: true,
+      onWaking,
+      pollIntervalMs: 5,
+      maxWaitMs: 15,
+    });
+    expect(onWaking).toHaveBeenCalledTimes(1);
+    expect(res.ok).toBe(false);
+    expect(res.wakingAttempted).toBe(true);
+  });
+
+  it("parseGithubRepo posts repo_url to /parse/github", async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ endpoints: [{ method: "get", path: "/health" }], files_scanned: 2 }),
+    });
+
+    const res = await parseGithubRepo("https://github.com/owner/repo", "main");
+    expect(res.ok).toBe(true);
+    expect(res.result.endpoints).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/parse/github"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ repo_url: "https://github.com/owner/repo", ref: "main" }),
       })
     );
   });
