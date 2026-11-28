@@ -27,6 +27,7 @@ export default function MetadataEditor({
 
   const [aiLoading, setAiLoading] = useState(false);
   const [aiProposal, setAiProposal] = useState(null);
+  const [overlaySource, setOverlaySource] = useState("human");
 
   const activeEndpointRef = useRef(endpoint);
   const abortRef = useRef(null);
@@ -37,6 +38,7 @@ export default function MetadataEditor({
     abortRef.current = null;
     setAiLoading(false);
     setAiProposal(null);
+    setOverlaySource("human");
     setError(null);
 
     if (endpoint) {
@@ -90,6 +92,7 @@ export default function MetadataEditor({
     if (includeTags && Array.isArray(aiProposal.suggested_tags) && aiProposal.suggested_tags.length > 0) {
       setTagsStr(aiProposal.suggested_tags.join(", "));
     }
+    setOverlaySource("ai-accepted");
     setAiProposal(null);
   }
 
@@ -111,6 +114,7 @@ export default function MetadataEditor({
       summary: summary.trim(),
       description: description.trim(),
       tags: parsedTags,
+      _overlaySource: overlaySource,
     });
   }
 

@@ -343,4 +343,79 @@ export async function summarizeSpecDiff(diffReport, { signal } = {}) {
   }
 }
 
+/**
+ * Persists a route documentation override in speccraft.overlay.json via backend.
+ */
+export async function saveOverlayEntry(endpoint, source = "human") {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/overlay/entry`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        method: endpoint?.method || "get",
+        path: endpoint?.path || "/",
+        operation_id: endpoint?.operation_id || null,
+        summary: endpoint?.summary ?? null,
+        description: endpoint?.description ?? null,
+        tags: endpoint?.tags ?? null,
+        source,
+      }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `Overlay save failed (${res.status})` };
+    }
+    return { ok: true, data: body };
+  } catch (err) {
+    return { ok: false, error: err.message || "Overlay service unreachable." };
+  }
+}
+
+/**
+ * Deletes an orphaned overlay entry by canonical key (`METHOD /path`).
+ */
+export async function deleteOverlayEntry(key) {
+  try {
+    const res = await fetchWithTimeout(
+      `${API_BASE_URL}/overlay/entry?key=${encodeURIComponent(key)}`,
+      { method: "DELETE" }
+    );
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `Overlay delete failed (${res.status})` };
+    }
+    return { ok: true, data: body };
+  } catch (err) {
+    return { ok: false, error: err.message || "Overlay service unreachable." };
+  }
+}
+
+/**
+ * Generates a white-label @media print HTML client handoff report from the backend.
+ */
+export async function exportHandoffHtml(
+  spec,
+  { validationReport = null, brandName = "SpecCraft AI" } = {}
+) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/export/handoff-html`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        spec,
+        validation_report: validationReport,
+        brand_name: brandName || "SpecCraft AI",
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, error: body.detail || `Handoff export failed (${res.status})` };
+    }
+    const html = await res.text();
+    return { ok: true, html };
+  } catch (err) {
+    return { ok: false, error: err.message || "Failed to generate handoff HTML." };
+  }
+}
+
 

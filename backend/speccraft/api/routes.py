@@ -17,6 +17,7 @@ from speccraft.diff_engine import SpecDiffEngine
 from speccraft.exporters import ExportManager, PostmanCollectionExporter
 from speccraft.models import ExtractionResult
 from speccraft.openapi_generator import OpenAPIGenerator
+from speccraft.overlay import OverlayEntry, get_overlay_store, make_overlay_key
 from speccraft.reader import ArchiveSecurityError
 from speccraft.route_extractor import RouteExtractor
 from speccraft.schema_validator import OpenAPISchemaValidator, ValidationReport
@@ -60,6 +61,21 @@ class ExportSpecRequest(BaseModel):
         default=None,
         description="Optional pre-computed validation report to include in bundle exports",
     )
+    brand_name: str = Field(
+        default="SpecCraft AI",
+        description="Optional client or agency brand name for white-label handoff exports",
+    )
+
+
+class OverlayUpsertRequest(BaseModel):
+    """Request payload for saving non-destructive endpoint documentation."""
+    method: str = Field(..., description="HTTP method (used in METHOD /path key)")
+    path: str = Field(..., description="Endpoint path template (used in METHOD /path key)")
+    operation_id: Optional[str] = Field(default=None)
+    summary: Optional[str] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    tags: Optional[List[str]] = Field(default=None)
+    source: str = Field(default="human", description="'human' or 'ai-accepted'")
 
 
 class EnrichEndpointRequest(BaseModel):
@@ -169,6 +185,7 @@ async def parse_codebase(
                 detail=f"Archive rejected (Security Guard): {d.message}",
             )
 
+    result = get_overlay_store().apply_to_extraction_result(result)
     return result.model_dump()
 
 
@@ -181,6 +198,7 @@ async def parse_code_json(payload: CodeParseRequest) -> Dict[str, Any]:
     """Extract routes from a JSON body containing code string."""
     extractor = RouteExtractor()
     result = extractor.extract_from_code_string(payload.code, filename=payload.filename)
+    result = get_overlay_store().apply_to_extraction_result(result)
     return result.model_dump()
 
 
@@ -351,4 +369,75 @@ async def ai_summarize_diff(payload: SummarizeDiffRequest) -> Dict[str, Any]:
     service = get_enricher_service()
     summary = await service.summarize_diff(payload.model_dump())
     return summary.model_dump()
+
+
+@api_router.post(
+    "/export/handoff-html",
+    summary="Generate White-Label Printable Client Handoff Report (HTML/PDF)",
+)
+async def export_handoff_html(payload: ExportSpecRequest) -> Response:
+    """Generate a self-contained @media print HTML client handoff report with XSS escaping."""
+    manager = ExportManager()
+    try:
+        html_doc = manager.to_handoff_html(
+            payload.spec,
+            validation_report=payload.validation_report,
+            brand_name=payload.brand_name,
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to generate handoff HTML: {ex}",
+        )
+
+    return Response(
+        content=html_doc,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="client-api-handoff.html"'
+        },
+    )
+
+
+@api_router.get(
+    "/overlay",
+    summary="Read Saved Non-Destructive Documentation Overlay",
+    response_model=Dict[str, Any],
+)
+async def get_overlay() -> Dict[str, Any]:
+    """Return all saved entries from speccraft.overlay.json."""
+    return get_overlay_store().load().model_dump()
+
+
+@api_router.put(
+    "/overlay/entry",
+    summary="Save Documentation Override for a Route",
+    response_model=Dict[str, Any],
+)
+async def upsert_overlay_entry(payload: OverlayUpsertRequest) -> Dict[str, Any]:
+    """Persist human-edited or AI-accepted docs keyed by METHOD /path."""
+    source_val = "ai-accepted" if payload.source == "ai-accepted" else "human"
+    entry = OverlayEntry(
+        operation_id=payload.operation_id,
+        summary=payload.summary,
+        description=payload.description,
+        tags=payload.tags,
+        source=source_val,
+    )
+    doc = get_overlay_store().upsert_entry(payload.method, payload.path, entry)
+    return {
+        "key": make_overlay_key(payload.method, payload.path),
+        "overlay": doc.model_dump(),
+    }
+
+
+@api_router.delete(
+    "/overlay/entry",
+    summary="Remove an Orphaned or Stale Overlay Entry",
+    response_model=Dict[str, Any],
+)
+async def delete_overlay_entry(key: str) -> Dict[str, Any]:
+    """Delete an overlay entry by canonical key (`METHOD /path`)."""
+    doc = get_overlay_store().delete_entry(key)
+    return {"deleted_key": key, "overlay": doc.model_dump()}
 

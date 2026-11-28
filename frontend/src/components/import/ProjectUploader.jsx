@@ -114,6 +114,9 @@ export default function ProjectUploader({ initialEndpoints = [], onParseSuccess 
         onParseSuccess?.({
           endpoints: extractedData.endpoints || [],
           openApiSpec: null,
+          schemas: extractedData.schemas || {},
+          diagnostics: extractedData.diagnostics || [],
+          orphanedOverlayKeys: extractedData.orphaned_overlay_keys || [],
           metrics: {
             filesScanned: extractedData.files_scanned,
             totalLoc: extractedData.total_loc,

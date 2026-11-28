@@ -321,3 +321,134 @@ export function formatValidationReportMarkdown(spec, validationReport = null) {
   return lines.join("\n");
 }
 
+/**
+ * Escape HTML special characters cleanly before interpolating into standalone HTML reports.
+ */
+export function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Offline client-side generator for white-label @media print HTML client handoff reports.
+ */
+export function buildHandoffHtml(spec, validationReport = null, brandName = "SpecCraft AI") {
+  const specObj = typeof spec === "string" ? JSON.parse(spec) : spec || {};
+  const info = specObj.info || {};
+  const paths = specObj.paths || {};
+  const schemas = specObj.components?.schemas || {};
+  const errors = validationReport?.errors || [];
+  const warnings = validationReport?.warnings || [];
+  const isValid = validationReport ? Boolean(validationReport.is_valid) : errors.length === 0;
+
+  const safeBrand = escapeHtml(brandName || "SpecCraft AI");
+  const safeTitle = escapeHtml(info.title || "API Documentation");
+  const safeVersion = escapeHtml(info.version || "1.0.0");
+  const safeDesc = escapeHtml(info.description || "Generated statically from codebase AST.");
+
+  const endpointCards = [];
+  let opCount = 0;
+
+  for (const rawPath of Object.keys(paths).sort()) {
+    const pathItem = paths[rawPath];
+    if (!pathItem || typeof pathItem !== "object") continue;
+
+    for (const method of HTTP_METHODS_ORDER) {
+      const op = pathItem[method];
+      if (!op || typeof op !== "object") continue;
+      opCount += 1;
+      const safeMethod = escapeHtml(method.toUpperCase());
+      const safePath = escapeHtml(rawPath);
+      const safeSummary = escapeHtml(op.summary || op.operationId || "No summary");
+      const safeOpDesc = op.description ? `<p class="op-desc">${escapeHtml(op.description)}</p>` : "";
+      const tagsHtml = (op.tags || [])
+        .map((t) => `<span class="tag">${escapeHtml(t)}</span>`)
+        .join("");
+
+      endpointCards.push(`
+        <article class="endpoint-card">
+          <div class="ep-head">
+            <span class="method method-${method}">${safeMethod}</span>
+            <code class="ep-path">${safePath}</code>
+            <div>${tagsHtml}</div>
+          </div>
+          <div class="ep-summary">${safeSummary}</div>
+          ${safeOpDesc}
+        </article>
+      `);
+    }
+  }
+
+  const schemaRows = Object.keys(schemas)
+    .sort()
+    .map((name) => {
+      const props = schemas[name]?.properties || {};
+      const propNames = Object.keys(props).map(escapeHtml).join(", ");
+      return `<tr><td><code>${escapeHtml(name)}</code></td><td>${Object.keys(props).length}</td><td><code>${propNames || "—"}</code></td></tr>`;
+    })
+    .join("");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${safeBrand} — ${safeTitle} Client Handoff</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0f172a; background: #f8fafc; margin: 0; padding: 24px; line-height: 1.5; }
+    .sheet { max-width: 960px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; }
+    header { border-bottom: 2px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+    .brand { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #2563eb; }
+    .status-pill { padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: ${isValid ? "#dcfce7" : "#fee2e2"}; color: ${isValid ? "#166534" : "#991b1b"}; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .metric { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+    .endpoint-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid; }
+    .ep-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+    .method { font-family: monospace; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 4px; color: #fff; background: #475569; }
+    .method-get { background: #0d6efd; } .method-post { background: #198754; } .method-put { background: #fd7e14; } .method-delete { background: #dc3545; } .method-patch { background: #6f42c1; }
+    .tag { background: #e2e8f0; color: #334155; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
+    .op-desc { color: #475569; font-size: 13px; margin: 4px 0 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+    th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
+    .no-print { text-align: right; margin-bottom: 16px; }
+    @media print { body { background: #fff; padding: 0; } .sheet { border: 0; padding: 0; } .no-print { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="no-print"><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
+    <header>
+      <div>
+        <div class="brand">${safeBrand} · Client API Handoff</div>
+        <h1>${safeTitle} <small>v${safeVersion}</small></h1>
+        <p>${safeDesc}</p>
+      </div>
+      <span class="status-pill">${isValid ? "VALID OPENAPI 3.0.3" : `INVALID (${errors.length} ERRORS)`}</span>
+    </header>
+    <section class="metrics">
+      <div class="metric"><div>Paths</div><strong>${Object.keys(paths).length}</strong></div>
+      <div class="metric"><div>Operations</div><strong>${opCount}</strong></div>
+      <div class="metric"><div>Schemas</div><strong>${Object.keys(schemas).length}</strong></div>
+      <div class="metric"><div>Warnings</div><strong>${warnings.length}</strong></div>
+    </section>
+    <section>
+      <h2>Endpoints (${opCount})</h2>
+      ${endpointCards.join("") || "<p>No endpoints defined.</p>"}
+    </section>
+    <section>
+      <h2>Data Schemas (${Object.keys(schemas).length})</h2>
+      <table>
+        <thead><tr><th>Model</th><th>Fields</th><th>Attributes</th></tr></thead>
+        <tbody>${schemaRows || '<tr><td colspan="3">No component schemas.</td></tr>'}</tbody>
+      </table>
+    </section>
+  </div>
+</body>
+</html>`;
+}
+

@@ -138,6 +138,10 @@ class ExtractionResult(BaseModel):
     files_scanned: int = Field(default=0, description="Total count of files parsed")
     total_loc: int = Field(default=0, description="Total lines of code scanned across all files")
     parse_duration_ms: float = Field(default=0.0, description="Execution duration in milliseconds")
+    orphaned_overlay_keys: List[str] = Field(
+        default_factory=list,
+        description="Saved overlay keys (METHOD /path) that no longer match any extracted route",
+    )
 
 
 class ChangeType(str, Enum):

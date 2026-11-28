@@ -146,6 +146,7 @@ def test_export_manager_formats_and_zip_bundle(shop_v1_spec):
             "openapi.yaml",
             "postman_collection.json",
             "validation_report.md",
+            "client_handoff.html",
         }
         postman_data = json.loads(zf.read("postman_collection.json").decode("utf-8"))
         assert postman_data["info"]["schema"] == POSTMAN_V2_1_SCHEMA

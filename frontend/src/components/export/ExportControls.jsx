@@ -14,6 +14,10 @@ export default function ExportControls({
   onDownloadReport,
   onCopyReport,
   onDownloadBundle,
+  onPrintHandoff,
+  onDownloadHandoffHtml,
+  brandName = "",
+  onBrandNameChange,
   isExporting = false,
 }) {
   const [copiedId, setCopiedId] = useState(null);
@@ -116,17 +120,60 @@ export default function ExportControls({
         ))}
       </div>
 
-      {onDownloadBundle && (
-        <div className="d-flex justify-content-end mt-3">
-          <button
-            type="button"
-            className="btn btn-dark btn-sm"
-            onClick={onDownloadBundle}
-            disabled={isExporting}
-            aria-label="Download Complete Documentation Bundle ZIP"
-          >
-            {isExporting ? "Preparing Bundle..." : "📦 Download Full API Documentation Bundle (.zip)"}
-          </button>
+      {(onDownloadBundle || onPrintHandoff || onDownloadHandoffHtml) && (
+        <div className="card border shadow-sm mt-3 bg-light">
+          <div className="card-body py-3 d-flex justify-content-between align-items-center flex-wrap gap-3">
+            {(onPrintHandoff || onDownloadHandoffHtml) && (
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <label htmlFor="handoff-brand-input" className="small fw-semibold text-muted mb-0">
+                  Client / Brand Name:
+                </label>
+                <input
+                  id="handoff-brand-input"
+                  type="text"
+                  className="form-control form-control-sm"
+                  style={{ width: "190px" }}
+                  placeholder="e.g. Acme Corp"
+                  value={brandName}
+                  onChange={(e) => onBrandNameChange?.(e.target.value)}
+                />
+                {onPrintHandoff && (
+                  <button
+                    type="button"
+                    className="btn btn-outline-dark btn-sm"
+                    onClick={onPrintHandoff}
+                    disabled={isExporting}
+                    aria-label="Print or Save Client Handoff PDF"
+                  >
+                    🖨️ Print / Save Client Handoff PDF
+                  </button>
+                )}
+                {onDownloadHandoffHtml && (
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={onDownloadHandoffHtml}
+                    disabled={isExporting}
+                    aria-label="Download Standalone Handoff HTML"
+                  >
+                    ⬇ Download Handoff (.html)
+                  </button>
+                )}
+              </div>
+            )}
+
+            {onDownloadBundle && (
+              <button
+                type="button"
+                className="btn btn-dark btn-sm ms-auto"
+                onClick={onDownloadBundle}
+                disabled={isExporting}
+                aria-label="Download Complete Documentation Bundle ZIP"
+              >
+                {isExporting ? "Preparing Bundle..." : "📦 Download Full API Documentation Bundle (.zip)"}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </section>

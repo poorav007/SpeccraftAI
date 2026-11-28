@@ -5,6 +5,7 @@ import CodebaseImportPage from "./pages/CodebaseImportPage.jsx";
 import ExportCenterPage from "./pages/ExportCenterPage.jsx";
 import SpecificationDiffPage from "./pages/SpecificationDiffPage.jsx";
 import SpecificationEditorPage from "./pages/SpecificationEditorPage.jsx";
+import { deleteOverlayEntry, saveOverlayEntry } from "./services/apiClient.js";
 import { STORAGE_KEY, loadState, resetState, saveState } from "./utils/localStorage.js";
 import { updateEndpointMetadata } from "./utils/routeHelpers.js";
 
@@ -15,6 +16,7 @@ export default function App() {
     schemas: {},
     metrics: null,
     diagnostics: [],
+    orphanedOverlayKeys: [],
   });
 
   function handleParseSuccess({
@@ -23,6 +25,7 @@ export default function App() {
     schemas = {},
     metrics = null,
     diagnostics = [],
+    orphanedOverlayKeys = [],
   }) {
     const nextState = {
       ...state,
@@ -39,6 +42,7 @@ export default function App() {
       schemas: schemas || {},
       metrics: metrics || null,
       diagnostics: diagnostics || [],
+      orphanedOverlayKeys: orphanedOverlayKeys || [],
     });
 
     const result = saveState(nextState);
@@ -49,7 +53,8 @@ export default function App() {
   }
 
   function handleUpdateEndpoint(updatedEndpoint) {
-    const updatedEndpoints = updateEndpointMetadata(state.endpoints, updatedEndpoint);
+    const { _overlaySource = "human", ...cleanEndpoint } = updatedEndpoint;
+    const updatedEndpoints = updateEndpointMetadata(state.endpoints, cleanEndpoint);
     const nextState = {
       ...state,
       endpoints: updatedEndpoints,
@@ -58,13 +63,23 @@ export default function App() {
     if (result.ok) {
       setState(nextState);
     }
+    // Persist non-destructive documentation overlay asynchronously when backend is online
+    saveOverlayEntry(cleanEndpoint, _overlaySource);
     return result;
+  }
+
+  function handleDismissOrphanedKey(key) {
+    setParseMetadata((prev) => ({
+      ...prev,
+      orphanedOverlayKeys: (prev.orphanedOverlayKeys || []).filter((k) => k !== key),
+    }));
+    deleteOverlayEntry(key);
   }
 
   function handleReset() {
     const fresh = resetState();
     setState(fresh);
-    setParseMetadata({ schemas: {}, metrics: null, diagnostics: [] });
+    setParseMetadata({ schemas: {}, metrics: null, diagnostics: [], orphanedOverlayKeys: [] });
     setActiveScreen("import");
   }
 
@@ -110,6 +125,8 @@ export default function App() {
             schemas={parseMetadata.schemas}
             metrics={parseMetadata.metrics}
             diagnostics={parseMetadata.diagnostics}
+            orphanedOverlayKeys={parseMetadata.orphanedOverlayKeys}
+            onDismissOrphanedKey={handleDismissOrphanedKey}
             onUpdateEndpoint={handleUpdateEndpoint}
             onNavigate={(screenId) => setActiveScreen(screenId)}
           />

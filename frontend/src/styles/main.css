@@ -1,6 +1,11 @@
 /* SpecCraft AI - Global Styles & Components */
 @import "./variables.css";
 
+html {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
 /* HTTP Method Badges */
 .badge-method-get {
   background-color: #0d6efd !important;
@@ -49,13 +54,29 @@
   font-weight: 700;
 }
 
-/* Tactile pointer-down press feedback */
+/* Tactile pointer-down press feedback & mobile touch ergonomics */
+.btn,
+[role="button"],
+.nav-link {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .btn:not(:disabled) {
   transition: transform 100ms var(--ease-out), background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
 }
 
 .btn:active:not(:disabled) {
   transform: scale(0.97);
+}
+
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 /* Route Table Styling */
@@ -99,10 +120,13 @@
   right: 0;
   width: min(650px, 94vw);
   height: 100vh;
+  height: 100dvh;
   background-color: #ffffff;
   box-shadow: -6px 0 24px rgba(0, 0, 0, 0.15);
   z-index: 1050;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   display: flex;
   flex-direction: column;
   transform: translateX(100%);
