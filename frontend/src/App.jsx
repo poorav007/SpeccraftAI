@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import Navbar from "./components/common/Navbar.jsx";
 import AstAnalysisPage from "./pages/AstAnalysisPage.jsx";
 import CodebaseImportPage from "./pages/CodebaseImportPage.jsx";
+import ExportCenterPage from "./pages/ExportCenterPage.jsx";
 import SpecificationDiffPage from "./pages/SpecificationDiffPage.jsx";
 import SpecificationEditorPage from "./pages/SpecificationEditorPage.jsx";
 import { STORAGE_KEY, loadState, resetState, saveState } from "./utils/localStorage.js";
@@ -142,22 +143,23 @@ export default function App() {
         )}
 
         {activeScreen === "export" && (
-          <div className="card shadow-sm border-0 text-center py-5 my-4">
-            <div className="card-body">
-              <span className="badge bg-success-subtle text-success mb-2">Milestone: Day 9</span>
-              <h3 className="h4 fw-bold">Screen 5: Export Center</h3>
-              <p className="text-muted small mx-auto" style={{ maxWidth: "520px" }}>
-                Download validated OpenAPI 3.0 specs in YAML/JSON and Postman v2.1 collections.
-              </p>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-secondary"
-                onClick={() => setActiveScreen("analysis")}
-              >
-                ← Back to AST Analysis (Screen 2)
-              </button>
-            </div>
-          </div>
+          <ExportCenterPage
+            spec={state.specs?.["parsed-preview"] || null}
+            endpoints={state.endpoints || []}
+            diagnostics={parseMetadata.diagnostics}
+            onLoadSampleSpec={(sampleSpec) => {
+              const nextState = {
+                ...state,
+                specs: {
+                  ...state.specs,
+                  "parsed-preview": sampleSpec,
+                },
+              };
+              saveState(nextState);
+              setState(nextState);
+            }}
+            onNavigate={(screenId) => setActiveScreen(screenId)}
+          />
         )}
       </main>
 
