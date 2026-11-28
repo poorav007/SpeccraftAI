@@ -10,9 +10,10 @@ import io
 import json
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from speccraft.diff_engine import SpecDiffEngine
+from speccraft.exporters import ExportManager, PostmanCollectionExporter
 from speccraft.models import ExtractionResult
 from speccraft.openapi_generator import OpenAPIGenerator
 from speccraft.reader import ArchiveSecurityError
@@ -51,6 +52,15 @@ class DiffRequest(BaseModel):
     target_spec: Union[Dict[str, Any], str] = Field(..., description="Target OpenAPI specification (S2)")
 
 
+class ExportSpecRequest(BaseModel):
+    """Request payload for exporting an OpenAPI specification to another format."""
+    spec: Union[Dict[str, Any], str] = Field(..., description="OpenAPI 3.0 specification dictionary, JSON, or YAML string")
+    validation_report: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional pre-computed validation report to include in bundle exports",
+    )
+
+
 @api_router.get("/health", summary="Health Check")
 async def health_check() -> Dict[str, Any]:
     """Returns backend service health status, version, and supported framework capabilities."""
@@ -59,7 +69,12 @@ async def health_check() -> Dict[str, Any]:
         "service": "speccraft-api-bridge",
         "version": "0.1.0",
         "supported_frameworks": ["fastapi", "express"],
-        "capabilities": ["ast_extraction", "openapi_generation", "schema_validation"],
+        "capabilities": [
+            "ast_extraction",
+            "openapi_generation",
+            "schema_validation",
+            "postman_export",
+        ],
     }
 
 
@@ -211,4 +226,62 @@ async def diff_openapi_specs(payload: DiffRequest) -> Dict[str, Any]:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Failed to compare specifications: {ex}",
         )
+
+
+@api_router.post(
+    "/export/postman",
+    summary="Convert OpenAPI to Postman Collection v2.1",
+    response_model=Dict[str, Any],
+)
+async def export_postman_collection(payload: ExportSpecRequest) -> Dict[str, Any]:
+    """Convert an OpenAPI 3.0 specification into a Postman Collection v2.1 JSON document."""
+    exporter = PostmanCollectionExporter()
+    try:
+        return exporter.convert(payload.spec)
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to export Postman collection: {ex}",
+        )
+
+
+@api_router.post(
+    "/export/yaml",
+    summary="Convert OpenAPI Specification to YAML",
+    response_model=Dict[str, Any],
+)
+async def export_openapi_yaml(payload: ExportSpecRequest) -> Dict[str, Any]:
+    """Serialize an OpenAPI 3.0 specification into clean YAML."""
+    manager = ExportManager()
+    try:
+        return {"format": "yaml", "content": manager.to_openapi_yaml(payload.spec)}
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to serialize YAML: {ex}",
+        )
+
+
+@api_router.post(
+    "/export/bundle",
+    summary="Download Complete API Documentation Bundle (.zip)",
+)
+async def export_documentation_bundle(payload: ExportSpecRequest) -> Response:
+    """Package OpenAPI JSON/YAML, Postman v2.1 collection, and validation report into a ZIP."""
+    manager = ExportManager()
+    try:
+        bundle_bytes = manager.export_bundle_zip(payload.spec, payload.validation_report)
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to generate export bundle: {ex}",
+        )
+
+    return Response(
+        content=bundle_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": 'attachment; filename="speccraft-export-bundle.zip"'
+        },
+    )
 

@@ -175,4 +175,78 @@ export async function compareOpenApiSpecs(baselineSpec, targetSpec) {
   }
 }
 
+/**
+ * Converts an OpenAPI 3.0 specification into a Postman Collection v2.1 JSON object.
+ *
+ * @param {object|string} spec - OpenAPI specification dictionary or string.
+ * @returns {Promise<{ ok: boolean, collection?: object, error?: string }>}
+ */
+export async function exportPostmanCollection(spec) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/export/postman`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spec }),
+    });
+
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `Postman export failed (${res.status})` };
+    }
+    return { ok: true, collection: body };
+  } catch (err) {
+    return { ok: false, error: err.message || "Failed to export Postman collection." };
+  }
+}
+
+/**
+ * Converts an OpenAPI 3.0 specification into clean YAML via backend ExportManager.
+ *
+ * @param {object|string} spec - OpenAPI specification dictionary or string.
+ * @returns {Promise<{ ok: boolean, yaml?: string, error?: string }>}
+ */
+export async function exportSpecYaml(spec) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/export/yaml`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spec }),
+    });
+
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `YAML export failed (${res.status})` };
+    }
+    return { ok: true, yaml: body.content };
+  } catch (err) {
+    return { ok: false, error: err.message || "Failed to serialize specification to YAML." };
+  }
+}
+
+/**
+ * Downloads a complete ZIP documentation bundle from the backend ExportManager.
+ *
+ * @param {object|string} spec - OpenAPI specification.
+ * @param {object|null} [validationReport=null] - Optional validation report.
+ * @returns {Promise<{ ok: boolean, blob?: Blob, error?: string }>}
+ */
+export async function exportBundleZip(spec, validationReport = null) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/export/bundle`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spec, validation_report: validationReport }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, error: body.detail || `Bundle export failed (${res.status})` };
+    }
+    const blob = await res.blob();
+    return { ok: true, blob };
+  } catch (err) {
+    return { ok: false, error: err.message || "Failed to download export bundle." };
+  }
+}
+
 
