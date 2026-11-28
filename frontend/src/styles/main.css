@@ -1,4 +1,5 @@
 /* SpecCraft AI - Global Styles & Components */
+@import "./variables.css";
 
 /* HTTP Method Badges */
 .badge-method-get {
@@ -48,13 +49,24 @@
   font-weight: 700;
 }
 
-/* Route Table Styling */
-.route-row {
-  transition: background-color 0.15s ease-in-out;
+/* Tactile pointer-down press feedback */
+.btn:not(:disabled) {
+  transition: transform 100ms var(--ease-out), background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
 }
 
-.route-row:hover {
-  background-color: rgba(13, 110, 253, 0.04);
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Route Table Styling */
+.route-row {
+  transition: background-color 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .route-row:hover {
+    background-color: rgba(13, 110, 253, 0.04);
+  }
 }
 
 .path-param-highlight {
@@ -62,17 +74,23 @@
   font-weight: 600;
 }
 
-/* Offcanvas / Side Drawer */
+/* Interruptible Offcanvas / Side Drawer (stays mounted with inert when closed) */
 .drawer-backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(2px);
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
   z-index: 1040;
-  animation: fadeIn 0.2s ease-out;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 220ms var(--ease-out), visibility 220ms linear;
+}
+
+.drawer-backdrop[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .drawer-panel {
@@ -87,24 +105,68 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateX(100%);
+  transition: transform 280ms var(--ease-drawer);
+  will-change: transform;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideInRight {
-  from {
+.drawer-backdrop[data-open="true"] .drawer-panel {
+  transform: translateX(0);
+  @starting-style {
     transform: translateX(100%);
   }
-  to {
-    transform: translateX(0);
+}
+
+.drawer-header-frosted {
+  background-color: rgba(248, 249, 250, 0.85);
+  backdrop-filter: blur(14px) saturate(160%);
+}
+
+/* AI Proposal Banner subtle entrance */
+.ai-proposal-card {
+  opacity: 1;
+  transform: scale(1);
+  transform-origin: top center;
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.97);
   }
 }
 
+/* Accessibility: Reduced Motion & Reduced Transparency */
+@media (prefers-reduced-motion: reduce) {
+  .btn:not(:disabled) {
+    transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  }
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+  .drawer-backdrop {
+    transition: opacity 180ms ease, visibility 180ms linear;
+  }
+  .drawer-panel {
+    transform: none;
+    opacity: 0;
+    transition: opacity 180ms ease;
+  }
+  .drawer-backdrop[data-open="true"] .drawer-panel {
+    opacity: 1;
+    transform: none;
+  }
+  .ai-proposal-card {
+    transition: opacity 180ms ease;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .drawer-backdrop {
+    background-color: rgba(15, 23, 42, 0.68);
+    backdrop-filter: none;
+  }
+  .drawer-header-frosted {
+    background-color: #f8f9fa;
+    backdrop-filter: none;
+  }
+}

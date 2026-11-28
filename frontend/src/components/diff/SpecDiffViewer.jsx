@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { summarizeSpecDiff } from "../../services/apiClient.js";
+import { buildOfflineDiffSummary, getProviderBadge } from "../../utils/aiHelpers.js";
 import {
   getBreakingBadge,
   getChangeBadge,
@@ -6,17 +8,49 @@ import {
 } from "../../utils/diffHelpers.js";
 
 /**
- * SpecDiffViewer component renders an accessible, responsive diff comparison table.
- * Adheres to Modern Web Guidance:
- * - Table wrapped in scrollable container with tabindex="0", role="region", aria-labelledby.
- * - Sticky table header for seamless context during vertical scrolling.
- * - Dual-channel indicators (icons + explicit text labels) ensuring color-blind accessibility.
- *
- * @param {object} props
- * @param {Array<object>} props.changes - List of DiffChangeRecord items to render.
+ * SpecDiffViewer component renders an accessible, responsive diff comparison table
+ * plus an optional AI Migration Summary banner backed by mobile-ready diff cards.
  */
 export default function SpecDiffViewer({ changes = [] }) {
   const [expandedRows, setExpandedRows] = useState({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSummary, setAiSummary] = useState(null);
+  const [showCardsPreview, setShowCardsPreview] = useState(false);
+  const abortRef = useRef(null);
+
+  useEffect(() => {
+    abortRef.current?.abort();
+    setAiLoading(false);
+    setAiSummary(null);
+    setShowCardsPreview(false);
+  }, [changes]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  async function handleSummarizeDiff() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const payload = {
+      summary: {
+        total_changes: changes.length,
+        breaking_changes: changes.filter((c) => c.is_breaking).length,
+      },
+      changes,
+    };
+
+    setAiLoading(true);
+    const res = await summarizeSpecDiff(payload, { signal: controller.signal });
+    if (controller.signal.aborted) return;
+
+    setAiLoading(false);
+    if (res.ok && res.report) {
+      setAiSummary(res.report);
+    } else if (!res.aborted) {
+      setAiSummary(buildOfflineDiffSummary(payload));
+    }
+  }
 
   function toggleRow(idx) {
     setExpandedRows((prev) => ({
@@ -39,14 +73,116 @@ export default function SpecDiffViewer({ changes = [] }) {
     );
   }
 
+  const providerBadge = aiSummary ? getProviderBadge(aiSummary.provider) : null;
+
   return (
-    <div
-      className="table-responsive rounded border shadow-sm bg-white"
-      tabIndex={0}
-      role="region"
-      aria-labelledby="diff-viewer-heading"
-      style={{ maxHeight: "620px", overflow: "auto" }}
-    >
+    <div>
+      {/* AI Changelog & Mobile Cards Summary Bar */}
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <span className="small text-muted">
+          Showing {changes.length} structural change(s)
+        </span>
+        <button
+          type="button"
+          className="btn btn-sm btn-outline-primary"
+          onClick={handleSummarizeDiff}
+          disabled={aiLoading}
+        >
+          {aiLoading ? "Summarizing..." : "✨ AI Summarize Changes"}
+        </button>
+      </div>
+
+      {aiSummary && (
+        <div className="card border-primary mb-3 ai-proposal-card">
+          <div className="card-header bg-primary-subtle py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div className="d-flex align-items-center gap-2">
+              <span className="small fw-bold text-primary-emphasis">
+                ✨ AI Migration &amp; Release Summary
+              </span>
+              <span
+                className={`badge ${
+                  aiSummary.risk_level === "high"
+                    ? "bg-danger"
+                    : aiSummary.risk_level === "medium"
+                    ? "bg-warning text-dark"
+                    : "bg-success"
+                }`}
+              >
+                Risk: {String(aiSummary.risk_level || "low").toUpperCase()}
+              </span>
+              {aiSummary.truncated && (
+                <span className="badge bg-secondary-subtle text-secondary">
+                  Capped (Top 50)
+                </span>
+              )}
+            </div>
+            <div className="d-flex align-items-center gap-2">
+              <span className={`badge ${providerBadge.badgeClass}`}>
+                {providerBadge.label}
+              </span>
+              <button
+                type="button"
+                className="btn-close btn-sm"
+                aria-label="Dismiss AI diff summary"
+                onClick={() => setAiSummary(null)}
+              />
+            </div>
+          </div>
+          <div className="card-body py-2 px-3 small">
+            <p className="mb-2 fw-medium">{aiSummary.executive_summary}</p>
+            {aiSummary.migration_steps?.length > 0 && (
+              <ul className="mb-2 ps-3">
+                {aiSummary.migration_steps.map((step, i) => (
+                  <li key={i}>{step}</li>
+                ))}
+              </ul>
+            )}
+            {aiSummary.cards?.length > 0 && (
+              <div>
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0 text-decoration-none"
+                  onClick={() => setShowCardsPreview((v) => !v)}
+                >
+                  {showCardsPreview ? "Hide" : "Preview"} Mobile Review Cards ({aiSummary.cards.length})
+                </button>
+                {showCardsPreview && (
+                  <div className="row g-2 mt-1">
+                    {aiSummary.cards.slice(0, 6).map((card, i) => (
+                      <div key={i} className="col-12 col-md-6">
+                        <div className="border rounded p-2 bg-light">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <code className="fw-bold">{card.endpoint}</code>
+                            <span
+                              className={`badge ${
+                                card.severity === "breaking" ? "bg-danger" : "bg-success"
+                              }`}
+                            >
+                              {card.severity}
+                            </span>
+                          </div>
+                          <div className="mb-1">{card.one_line_impact}</div>
+                          <div className="text-muted font-monospace" style={{ fontSize: "11px" }}>
+                            {card.before} → {card.after}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div
+        className="table-responsive rounded border shadow-sm bg-white"
+        tabIndex={0}
+        role="region"
+        aria-labelledby="diff-viewer-heading"
+        style={{ maxHeight: "620px", overflow: "auto" }}
+      >
       <h2 id="diff-viewer-heading" className="visually-hidden">
         API Specification Differences Table
       </h2>
@@ -172,6 +308,7 @@ export default function SpecDiffViewer({ changes = [] }) {
           })}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }

@@ -15,8 +15,20 @@ export default function AstAnalysisPage({
   onNavigate,
 }) {
   const [inspectingEndpoint, setInspectingEndpoint] = useState(null);
+  const [lastInspectingEndpoint, setLastInspectingEndpoint] = useState(null);
   const [editingEndpoint, setEditingEndpoint] = useState(null);
+  const [lastEditingEndpoint, setLastEditingEndpoint] = useState(null);
   const [saveToast, setSaveToast] = useState(null);
+
+  function openInspector(ep) {
+    setLastInspectingEndpoint(ep);
+    setInspectingEndpoint(ep);
+  }
+
+  function openEditor(ep) {
+    setLastEditingEndpoint(ep);
+    setEditingEndpoint(ep);
+  }
 
   function handleSaveMetadata(updatedEndpoint) {
     onUpdateEndpoint?.(updatedEndpoint);
@@ -122,32 +134,30 @@ export default function AstAnalysisPage({
       {/* Main Route Table */}
       <RouteTable
         endpoints={endpoints}
-        onInspectEndpoint={(ep) => setInspectingEndpoint(ep)}
-        onEditEndpoint={(ep) => setEditingEndpoint(ep)}
+        onInspectEndpoint={openInspector}
+        onEditEndpoint={openEditor}
         onNavigateToImport={() => onNavigate?.("import")}
       />
 
-      {/* Parameter & Schema Inspector Drawer */}
-      {inspectingEndpoint && (
-        <ParameterInspector
-          endpoint={inspectingEndpoint}
-          schemas={schemas}
-          onClose={() => setInspectingEndpoint(null)}
-          onEdit={(ep) => {
-            setInspectingEndpoint(null);
-            setEditingEndpoint(ep);
-          }}
-        />
-      )}
+      {/* Parameter & Schema Inspector Drawer (mounted with inert when closed for exit transition) */}
+      <ParameterInspector
+        endpoint={inspectingEndpoint || lastInspectingEndpoint}
+        isOpen={Boolean(inspectingEndpoint)}
+        schemas={schemas}
+        onClose={() => setInspectingEndpoint(null)}
+        onEdit={(ep) => {
+          setInspectingEndpoint(null);
+          openEditor(ep);
+        }}
+      />
 
-      {/* Metadata Editor Drawer */}
-      {editingEndpoint && (
-        <MetadataEditor
-          endpoint={editingEndpoint}
-          onSave={handleSaveMetadata}
-          onClose={() => setEditingEndpoint(null)}
-        />
-      )}
+      {/* Metadata Editor Drawer (mounted with inert when closed for exit transition) */}
+      <MetadataEditor
+        endpoint={editingEndpoint || lastEditingEndpoint}
+        isOpen={Boolean(editingEndpoint)}
+        onSave={handleSaveMetadata}
+        onClose={() => setEditingEndpoint(null)}
+      />
     </div>
   );
 }

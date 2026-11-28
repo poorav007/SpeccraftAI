@@ -1,16 +1,79 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { explainSchemaField } from "../../services/apiClient.js";
+import {
+  buildOfflineFieldExplanation,
+  getEndpointKey,
+  getProviderBadge,
+  isResponseForActiveEndpoint,
+} from "../../utils/aiHelpers.js";
 import { getMethodBadgeClass } from "../../utils/routeHelpers.js";
 
 /**
  * Slide-out Parameter & Schema Inspector Drawer.
+ * Stays mounted with `inert` when closed for symmetric animations and guards
+ * AI field explanations with AbortController + active route check.
  */
 export default function ParameterInspector({
   endpoint,
   schemas = {},
+  isOpen = Boolean(endpoint),
   onClose,
   onEdit,
 }) {
+  const [explainingKey, setExplainingKey] = useState(null);
+  const [fieldExplanation, setFieldExplanation] = useState(null);
+
+  const activeEndpointRef = useRef(endpoint);
+  const abortRef = useRef(null);
+
+  useEffect(() => {
+    activeEndpointRef.current = endpoint;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setExplainingKey(null);
+    setFieldExplanation(null);
+  }, [endpoint, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    function handleKeyDown(e) {
+      if (e.key === "Escape") onClose?.();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   if (!endpoint) return null;
+
+  async function handleExplainField(fieldPayload) {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const requestKey = getEndpointKey(endpoint);
+
+    setExplainingKey(fieldPayload.field_name);
+    const res = await explainSchemaField(
+      {
+        ...fieldPayload,
+        endpoint_path: endpoint.path,
+        endpoint_method: endpoint.method,
+      },
+      { signal: controller.signal }
+    );
+
+    if (controller.signal.aborted || !isResponseForActiveEndpoint(requestKey, activeEndpointRef.current)) {
+      return;
+    }
+
+    setExplainingKey(null);
+    if (res.ok && res.explanation) {
+      setFieldExplanation(res.explanation);
+    } else if (!res.aborted) {
+      setFieldExplanation(buildOfflineFieldExplanation(fieldPayload));
+    }
+  }
 
   const methodUpper = (endpoint.method || "").toUpperCase();
   const methodBadgeClass = getMethodBadgeClass(endpoint.method);
@@ -26,21 +89,27 @@ export default function ParameterInspector({
   const warnings = endpoint.warnings || [];
 
   return (
-    <div className="drawer-backdrop" onClick={onClose}>
+    <div
+      className="drawer-backdrop"
+      data-open={isOpen ? "true" : "false"}
+      inert={!isOpen ? "" : undefined}
+      onClick={onClose}
+    >
       <aside
         className="drawer-panel"
         onClick={(e) => e.stopPropagation()}
         aria-labelledby="inspector-title"
         role="dialog"
         aria-modal="true"
+        aria-hidden={!isOpen}
       >
         {/* Drawer Header */}
-        <div className="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
+        <div className="p-3 border-bottom d-flex justify-content-between align-items-center drawer-header-frosted">
           <div className="d-flex align-items-center gap-2">
             <span className={`badge ${methodBadgeClass} px-2 py-1`}>
               {methodUpper}
             </span>
-            <code className="h6 mb-0 text-dark fw-bold">{endpoint.path}</code>
+            <code id="inspector-title" className="h6 mb-0 text-dark fw-bold">{endpoint.path}</code>
           </div>
           <div className="d-flex align-items-center gap-2">
             <button
@@ -121,6 +190,35 @@ export default function ParameterInspector({
             </div>
           )}
 
+          {/* Inline AI Field Explanation Card */}
+          {fieldExplanation && (() => {
+            const badge = getProviderBadge(fieldExplanation.provider);
+            return (
+              <div className="card border-info mb-4 ai-proposal-card" role="status">
+                <div className="card-header bg-info-subtle py-2 px-3 d-flex justify-content-between align-items-center">
+                  <span className="small fw-bold text-info-emphasis">
+                    ✨ Field Explanation: <code>{fieldExplanation.field_name}</code>
+                  </span>
+                  <div className="d-flex align-items-center gap-2">
+                    <span className={`badge ${badge.badgeClass}`}>{badge.label}</span>
+                    <button
+                      type="button"
+                      className="btn-close btn-sm"
+                      aria-label="Dismiss explanation"
+                      onClick={() => setFieldExplanation(null)}
+                    />
+                  </div>
+                </div>
+                <div className="card-body py-2 px-3 small">
+                  <p className="mb-1">{fieldExplanation.explanation}</p>
+                  <div className="text-muted">
+                    Example: <code>{JSON.stringify(fieldExplanation.example)}</code>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Section: Parameters */}
           <div className="mb-4">
             <h6 className="fw-bold mb-2 text-primary">
@@ -140,6 +238,7 @@ export default function ParameterInspector({
                       <th>Type</th>
                       <th>Required</th>
                       <th>Default</th>
+                      <th className="text-end">AI</th>
                     </tr>
                   </thead>
                   <tbody className="small">
@@ -162,7 +261,7 @@ export default function ParameterInspector({
                           </span>
                         </td>
                         <td>
-                          <code>{p.type_annotation || p.type || "string"}</code>
+                          <code>{p.type_annotation || p.type || p.param_type || "string"}</code>
                         </td>
                         <td>
                           {p.required ? (
@@ -177,6 +276,25 @@ export default function ParameterInspector({
                           ) : (
                             <span className="text-muted">—</span>
                           )}
+                        </td>
+                        <td className="text-end">
+                          <button
+                            type="button"
+                            className="btn btn-outline-primary btn-sm py-0 px-1"
+                            disabled={explainingKey === p.name}
+                            onClick={() =>
+                              handleExplainField({
+                                field_name: p.name,
+                                field_type: p.type_annotation || p.type || p.param_type || "string",
+                                location: p.location || "query",
+                                required: Boolean(p.required),
+                                existing_description: p.description || null,
+                              })
+                            }
+                            aria-label={`Explain parameter ${p.name}`}
+                          >
+                            {explainingKey === p.name ? "..." : "✨"}
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -217,6 +335,7 @@ export default function ParameterInspector({
                           <th>Property</th>
                           <th>Type</th>
                           <th>Required</th>
+                          <th className="text-end">AI</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -234,6 +353,25 @@ export default function ParameterInspector({
                               ) : (
                                 <span className="text-muted">no</span>
                               )}
+                            </td>
+                            <td className="text-end">
+                              <button
+                                type="button"
+                                className="btn btn-outline-primary btn-sm py-0 px-1"
+                                disabled={explainingKey === field}
+                                onClick={() =>
+                                  handleExplainField({
+                                    field_name: field,
+                                    field_type: schema.type || schema.$ref || "string",
+                                    location: "body",
+                                    required: (requestSchemaObj.required || []).includes(field),
+                                    existing_description: schema.description || null,
+                                  })
+                                }
+                                aria-label={`Explain field ${field}`}
+                              >
+                                {explainingKey === field ? "..." : "✨"}
+                              </button>
                             </td>
                           </tr>
                         ))}

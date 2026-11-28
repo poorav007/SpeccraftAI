@@ -1,21 +1,97 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { enrichEndpointDocs } from "../../services/apiClient.js";
+import {
+  buildOfflineEndpointSuggestion,
+  getEndpointKey,
+  getProviderBadge,
+  isResponseForActiveEndpoint,
+} from "../../utils/aiHelpers.js";
 import { getMethodBadgeClass } from "../../utils/routeHelpers.js";
 
 /**
- * In-Place Metadata Editor Modal/Drawer for endpoints.
- * Allows updating operation_id, summary, description, and tags
- * while strictly preserving AST code facts.
+ * In-Place Metadata Editor Drawer for endpoints.
+ * Keeps mounted with `inert` when closed for symmetric transitions and
+ * guards AI suggestions with AbortController + active endpoint key check.
  */
-export default function MetadataEditor({ endpoint, onSave, onClose }) {
-  if (!endpoint) return null;
-
-  const [operationId, setOperationId] = useState(endpoint.operation_id || "");
-  const [summary, setSummary] = useState(endpoint.summary || "");
-  const [description, setDescription] = useState(endpoint.description || "");
-  const [tagsStr, setTagsStr] = useState((endpoint.tags || []).join(", "));
+export default function MetadataEditor({
+  endpoint,
+  isOpen = Boolean(endpoint),
+  onSave,
+  onClose,
+}) {
+  const [operationId, setOperationId] = useState(endpoint?.operation_id || "");
+  const [summary, setSummary] = useState(endpoint?.summary || "");
+  const [description, setDescription] = useState(endpoint?.description || "");
+  const [tagsStr, setTagsStr] = useState((endpoint?.tags || []).join(", "));
   const [error, setError] = useState(null);
 
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiProposal, setAiProposal] = useState(null);
+
+  const activeEndpointRef = useRef(endpoint);
+  const abortRef = useRef(null);
+
+  useEffect(() => {
+    activeEndpointRef.current = endpoint;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setAiLoading(false);
+    setAiProposal(null);
+    setError(null);
+
+    if (endpoint) {
+      setOperationId(endpoint.operation_id || "");
+      setSummary(endpoint.summary || "");
+      setDescription(endpoint.description || "");
+      setTagsStr((endpoint.tags || []).join(", "));
+    }
+  }, [endpoint, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    function handleKeyDown(e) {
+      if (e.key === "Escape") onClose?.();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  if (!endpoint) return null;
+
   const methodBadgeClass = getMethodBadgeClass(endpoint.method);
+
+  async function handleAiSuggest() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const requestKey = getEndpointKey(endpoint);
+
+    setAiLoading(true);
+    const res = await enrichEndpointDocs(endpoint, { signal: controller.signal });
+
+    if (controller.signal.aborted || !isResponseForActiveEndpoint(requestKey, activeEndpointRef.current)) {
+      return;
+    }
+
+    setAiLoading(false);
+    if (res.ok && res.proposal) {
+      setAiProposal(res.proposal);
+    } else if (!res.aborted) {
+      setAiProposal(buildOfflineEndpointSuggestion(endpoint));
+    }
+  }
+
+  function handleAcceptProposal(includeTags = true) {
+    if (!aiProposal) return;
+    if (aiProposal.summary) setSummary(aiProposal.summary);
+    if (aiProposal.description) setDescription(aiProposal.description);
+    if (includeTags && Array.isArray(aiProposal.suggested_tags) && aiProposal.suggested_tags.length > 0) {
+      setTagsStr(aiProposal.suggested_tags.join(", "));
+    }
+    setAiProposal(null);
+  }
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -38,16 +114,24 @@ export default function MetadataEditor({ endpoint, onSave, onClose }) {
     });
   }
 
+  const providerBadge = aiProposal ? getProviderBadge(aiProposal.provider) : null;
+
   return (
-    <div className="drawer-backdrop" onClick={onClose}>
+    <div
+      className="drawer-backdrop"
+      data-open={isOpen ? "true" : "false"}
+      inert={!isOpen ? "" : undefined}
+      onClick={onClose}
+    >
       <div
         className="drawer-panel"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-hidden={!isOpen}
         aria-labelledby="editor-title"
       >
-        <div className="p-3 border-bottom d-flex justify-content-between align-items-center bg-light">
+        <div className="p-3 border-bottom d-flex justify-content-between align-items-center drawer-header-frosted">
           <div className="d-flex align-items-center gap-2">
             <span className={`badge ${methodBadgeClass} px-2 py-1`}>
               {(endpoint.method || "").toUpperCase()}
@@ -88,6 +172,76 @@ export default function MetadataEditor({ endpoint, onSave, onClose }) {
               <span>Source File:</span> <code>{endpoint.source_file || "inline"}</code>
             </div>
           </div>
+
+          {/* AI Documentation Assistant Trigger */}
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <span className="small text-muted">Need cleaner OpenAPI docs?</span>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-primary"
+              onClick={handleAiSuggest}
+              disabled={aiLoading}
+            >
+              {aiLoading ? "Drafting..." : "✨ AI Suggest Docs"}
+            </button>
+          </div>
+
+          {/* Human-in-the-Loop AI Proposal Review Card */}
+          {aiProposal && (
+            <div className="card border-primary mb-3 ai-proposal-card">
+              <div className="card-header bg-primary-subtle py-2 px-3 d-flex justify-content-between align-items-center">
+                <span className="small fw-bold text-primary-emphasis">
+                  ✨ Proposed AI Documentation
+                </span>
+                <span className={`badge ${providerBadge.badgeClass}`}>
+                  {providerBadge.label}
+                </span>
+              </div>
+              <div className="card-body p-3 small">
+                <div className="mb-2">
+                  <span className="text-muted fw-semibold">Summary:</span>{" "}
+                  <span>{aiProposal.summary}</span>
+                </div>
+                <div className="mb-2">
+                  <span className="text-muted fw-semibold">Description:</span>{" "}
+                  <span>{aiProposal.description}</span>
+                </div>
+                {aiProposal.suggested_tags?.length > 0 && (
+                  <div className="mb-3">
+                    <span className="text-muted fw-semibold">Suggested Tags:</span>{" "}
+                    {aiProposal.suggested_tags.map((t) => (
+                      <span key={t} className="badge bg-secondary-subtle text-secondary me-1">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="d-flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    className="btn btn-success btn-sm"
+                    onClick={() => handleAcceptProposal(true)}
+                  >
+                    ✓ Accept All
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary btn-sm"
+                    onClick={() => handleAcceptProposal(false)}
+                  >
+                    ✏️ Apply &amp; Edit Docs Only
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => setAiProposal(null)}
+                  >
+                    ✕ Reject
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Field: Operation ID */}
           <div className="mb-3">
@@ -166,4 +320,3 @@ export default function MetadataEditor({ endpoint, onSave, onClose }) {
     </div>
   );
 }
-
