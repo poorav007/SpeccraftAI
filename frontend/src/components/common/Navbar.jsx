@@ -15,13 +15,21 @@ export default function Navbar({
   const [backendStatus, setBackendStatus] = useState({
     checked: false,
     online: false,
+    waking: false,
   });
 
   useEffect(() => {
     let mounted = true;
-    checkBackendHealth().then((res) => {
+    checkBackendHealth({
+      retryOnColdStart: true,
+      onWaking: () => {
+        if (mounted) {
+          setBackendStatus({ checked: false, online: false, waking: true });
+        }
+      },
+    }).then((res) => {
       if (mounted) {
-        setBackendStatus({ checked: true, online: res.ok });
+        setBackendStatus({ checked: true, online: res.ok, waking: false });
       }
     });
     return () => {
@@ -72,7 +80,7 @@ export default function Navbar({
         >
           <span>⚡ SpecCraft AI</span>
           <span className="badge bg-primary-subtle text-primary border border-primary-subtle small fw-normal">
-            AST Engine
+            API Docs &amp; Diff
           </span>
         </a>
 
@@ -106,6 +114,11 @@ export default function Navbar({
 
         {/* Right side status & reset */}
         <div className="d-flex align-items-center gap-2 mt-2 mt-lg-0">
+          {backendStatus.waking && !backendStatus.checked && (
+            <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle small py-1">
+              ⏳ Waking up backend...
+            </span>
+          )}
           {backendStatus.checked && (
             <span
               className={`badge ${
@@ -115,11 +128,11 @@ export default function Navbar({
               } small py-1`}
               title={
                 backendStatus.online
-                  ? "FastAPI AST Bridge is reachable at localhost:8000"
-                  : "Backend offline. Running in client fallback mode."
+                  ? "Connected to SpecCraft Cloud API"
+                  : "Cloud API unreachable. Running in browser local mode."
               }
             >
-              {backendStatus.online ? "● API Online" : "○ API Offline"}
+              {backendStatus.online ? "● Cloud API Connected" : "○ Local Mode"}
             </span>
           )}
 

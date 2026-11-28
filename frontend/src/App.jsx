@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Toaster } from "sonner";
 import Navbar from "./components/common/Navbar.jsx";
 import AstAnalysisPage from "./pages/AstAnalysisPage.jsx";
 import CodebaseImportPage from "./pages/CodebaseImportPage.jsx";
@@ -85,6 +86,7 @@ export default function App() {
 
   return (
     <div className="container-xl py-3">
+      <Toaster position="bottom-right" richColors />
       {/* Global Application Navigation Bar */}
       <Navbar
         activeScreen={activeScreen}

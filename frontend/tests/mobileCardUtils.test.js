@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import sampleCards from "../../mobile/src/sampleCards.json";
 import {
   normalizeLanBaseUrl,
+  parsePrTarget,
   recordSwipeDecision,
   summarizeDecisions,
 } from "../../mobile/src/cardUtils.js";
@@ -34,6 +35,15 @@ describe("Expo Go mobile swipe reviewer utilities", () => {
       expect(card).toHaveProperty("before");
       expect(card).toHaveProperty("after");
     }
+  });
+
+  it("parses GitHub PR targets cleanly for mobile PR comment loop", () => {
+    expect(parsePrTarget("poorav007/SpeccraftAI#42")).toEqual({
+      owner: "poorav007",
+      repo: "SpeccraftAI",
+      prNumber: 42,
+    });
+    expect(parsePrTarget("invalid-string")).toBeNull();
   });
 });
 

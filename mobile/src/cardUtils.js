@@ -93,3 +93,58 @@ export async function fetchDiffCardsFromLan(lanInput, diffPayload, timeoutMs = 8
   }
 }
 
+/**
+ * Parse shorthand PR reference like "poorav007/SpeccraftAI#12".
+ */
+export function parsePrTarget(rawInput) {
+  const match = String(rawInput || "")
+    .trim()
+    .match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#(\d+)$/);
+  if (!match) return null;
+  return {
+    owner: match[1],
+    repo: match[2],
+    prNumber: Number(match[3]),
+  };
+}
+
+/**
+ * Post persisted Approve/Block swipe decisions back to a GitHub PR via backend bridge.
+ */
+export async function postDecisionsToGithubPr(
+  lanInput,
+  { owner, repo, prNumber, decisions, token = null, timeoutMs = 10000 }
+) {
+  const baseUrl = normalizeLanBaseUrl(lanInput);
+  if (!baseUrl) {
+    return { ok: false, error: "Configure a valid Backend URL / LAN IP first." };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${baseUrl}/api/github/pr-review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        owner,
+        repo,
+        pr_number: prNumber,
+        decisions: Object.values(decisions || {}),
+        github_token: token || null,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const body = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: body.detail || `GitHub PR post failed (${res.status})` };
+    }
+    return { ok: true, data: body };
+  } catch (err) {
+    clearTimeout(timer);
+    return { ok: false, error: err?.message || "Failed to reach backend PR bridge." };
+  }
+}
+

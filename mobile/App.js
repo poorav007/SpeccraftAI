@@ -19,6 +19,8 @@ import {
   STORAGE_KEYS,
   fetchDiffCardsFromLan,
   normalizeLanBaseUrl,
+  parsePrTarget,
+  postDecisionsToGithubPr,
   recordSwipeDecision,
   summarizeDecisions,
 } from "./src/cardUtils";
@@ -28,6 +30,7 @@ const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.28;
 
 export default function App() {
   const [lanIp, setLanIp] = useState("192.168.1.10:8000");
+  const [prTarget, setPrTarget] = useState("poorav007/SpeccraftAI#1");
   const [showSettings, setShowSettings] = useState(false);
   const [cardsPayload, setCardsPayload] = useState(sampleCardsData);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -153,6 +156,26 @@ export default function App() {
     setStatusMsg("Cleared review decisions.");
   }
 
+  async function handlePostToGithubPr() {
+    const parsed = parsePrTarget(prTarget);
+    if (!parsed) {
+      setStatusMsg("Enter PR target as owner/repo#number (e.g. poorav007/SpeccraftAI#12)");
+      return;
+    }
+    setStatusMsg(`Posting review to ${parsed.owner}/${parsed.repo}#${parsed.prNumber}...`);
+    const res = await postDecisionsToGithubPr(lanIp, {
+      ...parsed,
+      decisions,
+    });
+    if (res.ok && res.data?.posted) {
+      setStatusMsg(`Posted PR comment: ${res.data.comment_url}`);
+    } else if (res.ok) {
+      setStatusMsg(`Generated PR review preview (${res.data?.reason || "token unset"}).`);
+    } else {
+      setStatusMsg(res.error);
+    }
+  }
+
   const cardRotate = pan.x.interpolate({
     inputRange: [-SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 2],
     outputRange: ["-7deg", "0deg", "7deg"],
@@ -184,6 +207,15 @@ export default function App() {
               value={lanIp}
               onChangeText={setLanIp}
               placeholder="192.168.1.42:8000"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={styles.label}>GitHub PR Target (owner/repo#number)</Text>
+            <TextInput
+              style={styles.input}
+              value={prTarget}
+              onChangeText={setPrTarget}
+              placeholder="poorav007/SpeccraftAI#12"
               autoCapitalize="none"
               autoCorrect={false}
             />
@@ -282,6 +314,9 @@ export default function App() {
                 </Text>
               </View>
             ))}
+            <TouchableOpacity style={styles.primaryBtn} onPress={handlePostToGithubPr}>
+              <Text style={styles.btnTextWhite}>Post Decisions to GitHub PR</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.resetBtn} onPress={handleResetSession}>
               <Text style={styles.btnTextWhite}>Restart Review</Text>
             </TouchableOpacity>
